@@ -1,9 +1,5 @@
 # Target Info keys
 
-Add these in Xcode: select the **Toolbox target → Info tab → Custom iOS
-Target Properties → +**. Keep "Generate Info.plist File" = Yes and leave
-"Info.plist File" empty — do not use a physical Info.plist.
-
 | Key (as shown in Xcode) | Raw key | Value | Needed for |
 |---|---|---|---|
 | Privacy - Camera Usage Description | `NSCameraUsageDescription` | Toolbox uses your camera to scan documents. | Stage 2 scanner |
