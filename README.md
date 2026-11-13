@@ -151,4 +151,4 @@ Run with **⌘U** in Xcode. If your module isn't named `Toolbox`, update the `@t
 
 ## Author
 
-Built by **Ayush**. Feel free to open an issue or reach out.
+Built by **Yushick**. Feel free to open an issue or reach out.
