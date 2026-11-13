@@ -17,10 +17,12 @@ A privacy-first iOS utility app: scan documents, compress and resize files, read
 ## Screenshots
 
 <!-- Add screenshots to a /Screenshots folder and update the paths below. -->
-| Home | Import | Scanner | Files |
+| Home | Scanner | Files |
 |:---:|:---:|:---:|:---:|
 | `` | <img width="240" height="500" alt="Homepage" src="https://github.com/user-attachments/assets/8b72b0dd-5a51-40e5-8052-082c1272debe" />
-<div align="center"> | `Desktop/homepage.png` | `Desktop/scanpage.png` |
+<div align="center"> | <img width="240" height="500" alt="settings" src="https://github.com/user-attachments/assets/85dc014f-fe11-4f35-b779-9985b36f1677" />
+ | <img width="240" height="500" alt="scanpage" src="https://github.com/user-attachments/assets/8de9d093-88ef-4b8e-b9ab-7ad8e62c12e5" />
+ |
 
 ## Why Toolbox?
 
