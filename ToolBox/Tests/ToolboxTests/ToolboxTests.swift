@@ -369,7 +369,7 @@ final class BarcodeParsingTests: XCTestCase {
     }
 
     func testParsesEscapedCharactersAndOpenNetworks() throws {
-        let escaped = try XCTUnwrap(BarcodeScannerService.parseWiFi("WIFI:T:WPA;S:My\;Net;P:pa\\:ss;;"))
+        let escaped = try XCTUnwrap(BarcodeScannerService.parseWiFi(#"WIFI:T:WPA;S:My\;Net;P:pa\:ss;;"#))
         XCTAssertEqual(escaped.ssid, "My;Net")
         XCTAssertEqual(escaped.password, "pa:ss")
 
