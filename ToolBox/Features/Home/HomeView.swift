@@ -15,50 +15,98 @@ struct HomeView: View {
         recentFiles.filter { FileService.exists($0) }
     }
 
-    /// Set by the environment / coordinator; kept simple here as a
-    /// closure so Stage 1 doesn't need full navigation wired yet.
+    /// Set by the environment / coordinator
     var onSelectTool: (Tool) -> Void = { _ in }
     /// Called when the user picks an operation for an imported file.
     var onImport: (Tool, ImportedMedia) -> Void = { _, _ in }
 
-    // Import
-    @State private var importedMedia: ImportedMedia?
-    @State private var pendingChoice: (tool: Tool, media: ImportedMedia)?
+    // Import State
     @State private var isFileImporterPresented = false
     @State private var isPhotoPickerPresented = false
     @State private var photoSelection: [PhotosPickerItem] = []
     @State private var isDropTargeted = false
-    @State private var isImporting = false
-    @State private var importAlert: String?
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: AppSpacing.xl) {
-                    header
-                    SearchBar(text: $viewModel.searchText)
-                        .padding(.horizontal, AppSpacing.lg)
+            ZStack(alignment: .top) {
+                Color.black.ignoresSafeArea()
 
-                    if viewModel.isSearching {
-                        searchResultsSection
-                    } else {
-                        ImportDropZone(isTargeted: isDropTargeted, isBusy: isImporting,
-                                       onPhotos: { isPhotoPickerPresented = true },
-                                       onFiles: { isFileImporterPresented = true })
-                            .padding(.horizontal, AppSpacing.lg)
-                        if !visibleRecentFiles.isEmpty {
-                            recentSection
-                        }
-                        toolsSections
-                    }
+                GeometryReader { proxy in
+                    let height = proxy.size.height * 0.38
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.0, green: 0.63, blue: 0.61).opacity(0.40), // #00A19B deep teal
+                            Color(red: 0.12, green: 0.13, blue: 1.0).opacity(0.22), // #1E22FF indigo
+                            Color.black
+                        ],
+                        center: .top,
+                        startRadius: 10,
+                        endRadius: height
+                    )
+                    .frame(height: height)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .ignoresSafeArea(edges: .top)
                 }
-                .padding(.vertical, AppSpacing.lg)
+                .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: AppSpacing.xl) {
+                        header
+                        SearchBar(text: $viewModel.searchText)
+                            .padding(.horizontal, AppSpacing.lg)
+
+                        if viewModel.isSearching {
+                            searchResultsSection
+                        } else {
+                            ImportDropZone(
+                                stagedMedia: viewModel.stagedMedia,
+                                thumbnail: viewModel.stagedThumbnail,
+                                title: viewModel.stagedTitle,
+                                detail: viewModel.stagedDetail,
+                                isLoading: viewModel.isLoadingStaged,
+                                isTargeted: isDropTargeted,
+                                isBusy: viewModel.isImporting,
+                                onPhotos: { isPhotoPickerPresented = true },
+                                onFiles: { isFileImporterPresented = true },
+                                onAction: { tool in
+                                    if let media = viewModel.stagedMedia {
+                                        onImport(tool, media)
+                                    }
+                                },
+                                onShare: {
+                                    if let firstURL = viewModel.stagedMedia?.items.first?.url {
+                                        ShareSheet.present([firstURL])
+                                    }
+                                },
+                                onClear: {
+                                    withAnimation(.snappy) {
+                                        viewModel.clearStaged()
+                                    }
+                                }
+                            )
+                            .padding(.horizontal, AppSpacing.lg)
+
+                            if !visibleRecentFiles.isEmpty {
+                                recentSection
+                            }
+                            toolsSections
+                        }
+                    }
+                    .padding(.vertical, AppSpacing.lg)
+                }
             }
-            .background(AppColors.background)
             .toolbar(.hidden, for: .navigationBar)
             .animation(.snappy, value: viewModel.searchText)
             .modifier(importModifiers)
             .quickLookPreview($previewURL)
+            .alert("Import", isPresented: Binding(
+                get: { viewModel.importAlert != nil },
+                set: { if !$0 { viewModel.importAlert = nil } })
+            ) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(viewModel.importAlert ?? "")
+            }
         }
     }
 
@@ -66,16 +114,46 @@ struct HomeView: View {
 
     private var importModifiers: some ViewModifier {
         ImportModifiers(
-            importedMedia: $importedMedia,
-            pendingChoice: $pendingChoice,
             isFileImporterPresented: $isFileImporterPresented,
             isPhotoPickerPresented: $isPhotoPickerPresented,
             photoSelection: $photoSelection,
             isDropTargeted: $isDropTargeted,
-            isImporting: $isImporting,
-            alertMessage: $importAlert,
-            onImport: onImport
+            isImporting: $viewModel.isImporting,
+            onFinishImport: { items in
+                finishImport(items)
+            }
         )
+    }
+
+    private func finishImport(_ items: [ImportedItem]) {
+        viewModel.isImporting = false
+        guard let media = ImportService.makeMedia(from: items) else {
+            items.forEach { try? FileManager.default.removeItem(at: $0.url.deletingLastPathComponent()) }
+            viewModel.importAlert = items.isEmpty
+                ? "That file couldn't be opened. If it's in iCloud, wait for it to download and try again."
+                : "Toolbox works with PDFs and images. That file type isn't supported yet."
+            return
+        }
+        withAnimation(.snappy) {
+            viewModel.stageMedia(media)
+        }
+    }
+
+    private func handleToolSelection(_ tool: Tool) {
+        if let media = viewModel.stagedMedia, isCompatible(tool: tool, media: media) {
+            onImport(tool, media)
+        } else {
+            onSelectTool(tool)
+        }
+    }
+
+    private func isCompatible(tool: Tool, media: ImportedMedia) -> Bool {
+        switch media.kind {
+        case .pdf:
+            return tool.id == .compressPDF || tool.id == .ocr
+        case .image:
+            return tool.id == .compressImage || tool.id == .resizeImage || tool.id == .ocr || tool.id == .qrBarcodeScanner
+        }
     }
 
     private var header: some View {
@@ -124,7 +202,7 @@ struct HomeView: View {
 
                 // Primary (hero) tools for this category get the large card.
                 ForEach(viewModel.primaryTools.filter { $0.category == category }) { tool in
-                    Button { onSelectTool(tool) } label: {
+                    Button { handleToolSelection(tool) } label: {
                         LargeToolCard(tool: tool)
                     }
                     .buttonStyle(.plain)
@@ -138,7 +216,7 @@ struct HomeView: View {
                                          GridItem(.flexible(), spacing: AppSpacing.md)],
                               spacing: AppSpacing.md) {
                         ForEach(secondary) { tool in
-                            Button { onSelectTool(tool) } label: {
+                            Button { handleToolSelection(tool) } label: {
                                 ToolCard(tool: tool)
                             }
                             .buttonStyle(.plain)
@@ -161,7 +239,7 @@ struct HomeView: View {
                     SectionHeader(title: category.rawValue)
                     VStack(spacing: 0) {
                         ForEach(viewModel.searchResults.filter { $0.category == category }) { tool in
-                            Button { onSelectTool(tool) } label: {
+                            Button { handleToolSelection(tool) } label: {
                                 RecentFileRow(icon: tool.icon, name: tool.title, detail: tool.subtitle)
                             }
                             .buttonStyle(.plain)
@@ -194,20 +272,14 @@ private extension Date {
     }
 }
 
-/// All the import plumbing for Home, kept out of the main view body.
+/// All the import picker plumbing for Home, kept out of the main view body.
 private struct ImportModifiers: ViewModifier {
-    @Binding var importedMedia: ImportedMedia?
-    @Binding var pendingChoice: (tool: Tool, media: ImportedMedia)?
     @Binding var isFileImporterPresented: Bool
     @Binding var isPhotoPickerPresented: Bool
     @Binding var photoSelection: [PhotosPickerItem]
     @Binding var isDropTargeted: Bool
     @Binding var isImporting: Bool
-    @Binding var alertMessage: String?
-    var onImport: (Tool, ImportedMedia) -> Void
-
-    /// Tracks what the sheet showed, so it can be cleaned up if dismissed.
-    @State private var lastShown: ImportedMedia?
+    var onFinishImport: ([ImportedItem]) -> Void
 
     func body(content: Content) -> some View {
         content
@@ -218,7 +290,7 @@ private struct ImportModifiers: ViewModifier {
                 isImporting = true
                 Task {
                     let items = await Task.detached { ImportService.stagePicked(urls) }.value
-                    finish(items)
+                    onFinishImport(items)
                 }
             }
             .photosPicker(isPresented: $isPhotoPickerPresented,
@@ -237,55 +309,14 @@ private struct ImportModifiers: ViewModifier {
                             items.append(ImportedItem(url: file.url, name: file.name))
                         }
                     }
-                    finish(items)
+                    onFinishImport(items)
                 }
             }
             .dropDestination(for: DroppedFile.self) { files, _ in
                 guard !files.isEmpty else { return false }
-                finish(files.map { ImportService.item(for: $0.url) })
+                onFinishImport(files.map { ImportService.item(for: $0.url) })
                 return true
             } isTargeted: { isDropTargeted = $0 }
-            .sheet(item: $importedMedia, onDismiss: {
-                if let choice = pendingChoice {
-                    pendingChoice = nil
-                    onImport(choice.tool, choice.media)
-                } else if let media = lastShown {
-                    ImportService.discard(media)
-                }
-                lastShown = nil
-            }) { media in
-                ImportActionsSheet(
-                    media: media,
-                    onChoose: { tool in
-                        pendingChoice = (tool, media)
-                        importedMedia = nil
-                    },
-                    onCancel: { importedMedia = nil }
-                )
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-            }
-            .alert("Import", isPresented: Binding(
-                get: { alertMessage != nil },
-                set: { if !$0 { alertMessage = nil } })
-            ) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(alertMessage ?? "")
-            }
-    }
-
-    private func finish(_ items: [ImportedItem]) {
-        isImporting = false
-        guard let media = ImportService.makeMedia(from: items) else {
-            items.forEach { try? FileManager.default.removeItem(at: $0.url.deletingLastPathComponent()) }
-            alertMessage = items.isEmpty
-                ? "That file couldn't be opened. If it's in iCloud, wait for it to download and try again."
-                : "Toolbox works with PDFs and images. That file type isn't supported yet."
-            return
-        }
-        lastShown = media
-        importedMedia = media
     }
 }
 
