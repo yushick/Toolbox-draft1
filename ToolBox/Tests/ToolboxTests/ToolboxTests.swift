@@ -529,44 +529,38 @@ final class StorageAndHistoryTests: XCTestCase {
         XCTAssertEqual(try context.fetch(FetchDescriptor<ProcessedFile>()).count, 0)
     }
 
-    func testDeletingFileCascadesToRecentItems() throws {
+    func testDeletingFileRemovesRecordAndDiskFile() throws {
         let context = try makeContext()
-        let name = "ut-delete-cascade-\(UUID().uuidString).txt"
+        let name = "ut-delete-\(UUID().uuidString).txt"
         let url = FileService.documentsDirectory.appendingPathComponent(name)
         try Data("x".utf8).write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
 
         let file = ProcessedFile(filename: name, kind: .text, byteSize: 1, relativePath: name)
-        let recent = RecentItem(toolID: .ocr, summary: "Saved text", relativePath: name, fileID: file.id)
         context.insert(file)
-        context.insert(recent)
         try context.save()
 
         FilesViewModel().delete(file, in: context)
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
         XCTAssertEqual(try context.fetch(FetchDescriptor<ProcessedFile>()).count, 0)
-        XCTAssertEqual(try context.fetch(FetchDescriptor<RecentItem>()).count, 0)
     }
 
-    func testClearingGeneratedFilesCascadesToRecentItems() throws {
+    func testClearingGeneratedFilesRemovesRecordsAndDiskFiles() throws {
         let context = try makeContext()
-        let name = "ut-clear-cascade-\(UUID().uuidString).txt"
+        let name = "ut-clear-files-\(UUID().uuidString).txt"
         let url = FileService.documentsDirectory.appendingPathComponent(name)
         try Data("x".utf8).write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
 
         let file = ProcessedFile(filename: name, kind: .text, byteSize: 1, relativePath: name)
-        let recent = RecentItem(toolID: .compressPDF, summary: "PDF compressed", relativePath: name, fileID: file.id)
         context.insert(file)
-        context.insert(recent)
         try context.save()
 
         SettingsViewModel().clearGeneratedFiles([file], in: context)
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
         XCTAssertEqual(try context.fetch(FetchDescriptor<ProcessedFile>()).count, 0)
-        XCTAssertEqual(try context.fetch(FetchDescriptor<RecentItem>()).count, 0)
     }
 
     func testFilesAreSearchedAndSorted() {

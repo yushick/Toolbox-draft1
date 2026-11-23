@@ -98,17 +98,6 @@ final class OCRViewModel {
         run(inputs, cleanup: media.items.map(\.url), in: context)
     }
 
-    @discardableResult
-    func recordRecentItem(in context: ModelContext) -> Bool {
-        context.insert(RecentItem(toolID: .ocr, summary: "Text extracted"))
-        do {
-            try context.save()
-            return true
-        } catch {
-            return false
-        }
-    }
-
     // MARK: - Recognition
 
     private func run(_ inputs: [OCRInput], cleanup: [URL], in context: ModelContext? = nil) {
@@ -135,8 +124,16 @@ final class OCRViewModel {
                 fileName = Self.defaultName()
                 statusMessage = nil
                 stage = .result
-                if let context {
-                    recordRecentItem(in: context)
+                if let context, let data = text.data(using: .utf8) {
+                    let baseName = Self.sanitized(fileName)
+                    if let url = try? await Task.detached(priority: .userInitiated, operation: {
+                        try OutputFiles.write(data, name: baseName, ext: "txt")
+                    }).value {
+                        let file = ProcessedFile(filename: url.lastPathComponent, kind: .text,
+                                                 byteSize: data.count, relativePath: url.lastPathComponent)
+                        context.insert(file)
+                        try? context.save()
+                    }
                 }
             } catch is CancellationError {
                 stage = .pick
@@ -183,8 +180,6 @@ final class OCRViewModel {
             let file = ProcessedFile(filename: url.lastPathComponent, kind: kind,
                                      byteSize: data.count, relativePath: url.lastPathComponent)
             context.insert(file)
-            context.insert(RecentItem(toolID: .ocr, summary: "Saved \(url.lastPathComponent)",
-                                      relativePath: url.lastPathComponent, fileID: file.id))
             try? context.save()
             statusMessage = "Saved \(url.lastPathComponent). It's also in your Files tab."
             ShareSheet.present([url])

@@ -2,15 +2,17 @@ import SwiftUI
 import SwiftData
 import PhotosUI
 import UniformTypeIdentifiers
+import QuickLook
 
 struct HomeView: View {
     @State private var viewModel = HomeViewModel()
-    @Query(sort: \RecentItem.timestamp, order: .reverse)
-    private var recentItems: [RecentItem]
+    @Query(sort: \ProcessedFile.createdAt, order: .reverse)
+    private var recentFiles: [ProcessedFile]
     @Environment(\.modelContext) private var modelContext
+    @State private var previewURL: URL?
 
-    private var visibleRecentItems: [RecentItem] {
-        recentItems.filter(\.isFileAvailable)
+    private var visibleRecentFiles: [ProcessedFile] {
+        recentFiles.filter { FileService.exists($0) }
     }
 
     /// Set by the environment / coordinator; kept simple here as a
@@ -44,7 +46,7 @@ struct HomeView: View {
                                        onPhotos: { isPhotoPickerPresented = true },
                                        onFiles: { isFileImporterPresented = true })
                             .padding(.horizontal, AppSpacing.lg)
-                        if !visibleRecentItems.isEmpty {
+                        if !visibleRecentFiles.isEmpty {
                             recentSection
                         }
                         toolsSections
@@ -56,9 +58,7 @@ struct HomeView: View {
             .toolbar(.hidden, for: .navigationBar)
             .animation(.snappy, value: viewModel.searchText)
             .modifier(importModifiers)
-            .onAppear {
-                purgeOrphanedRecents()
-            }
+            .quickLookPreview($previewURL)
         }
     }
 
@@ -88,13 +88,22 @@ struct HomeView: View {
     }
 
     private var recentSection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+        let displayedFiles = Array(visibleRecentFiles.prefix(5))
+        return VStack(alignment: .leading, spacing: AppSpacing.sm) {
             SectionHeader(title: "Recent")
             VStack(spacing: 0) {
-                ForEach(visibleRecentItems.prefix(3)) { item in
-                    RecentFileRow(icon: iconFor(item), name: item.summary,
-                                  detail: item.timestamp.relativeDescription)
-                    if item.id != visibleRecentItems.prefix(3).last?.id {
+                ForEach(displayedFiles) { file in
+                    Button {
+                        if FileService.exists(file) {
+                            previewURL = FileService.url(for: file)
+                        }
+                    } label: {
+                        RecentFileRow(icon: icon(for: file),
+                                      name: file.filename,
+                                      detail: file.createdAt.relativeDescription)
+                    }
+                    .buttonStyle(.plain)
+                    if file.id != displayedFiles.last?.id {
                         Divider().padding(.leading, 62)
                     }
                 }
@@ -165,18 +174,12 @@ struct HomeView: View {
         }
     }
 
-    private func iconFor(_ item: RecentItem) -> String {
-        Tool.all.first(where: { $0.id.rawValue == item.toolID })?.icon ?? "clock"
-    }
-
-    private func purgeOrphanedRecents() {
-        var didDelete = false
-        for item in recentItems where !item.isFileAvailable {
-            modelContext.delete(item)
-            didDelete = true
-        }
-        if didDelete {
-            try? modelContext.save()
+    private func icon(for file: ProcessedFile) -> String {
+        switch ProcessedFileKind(rawValue: file.kind) {
+        case .pdf: return "doc.fill"
+        case .image: return "photo.fill"
+        case .text: return "text.alignleft"
+        case .none: return "doc"
         }
     }
 }

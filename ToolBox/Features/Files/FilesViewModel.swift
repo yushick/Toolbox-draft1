@@ -122,29 +122,12 @@ final class FilesViewModel {
 
     func delete(_ file: ProcessedFile, in context: ModelContext) {
         fileToDelete = nil
-        let relativePath = file.relativePath
-        let fileID = file.id
-        let filename = file.filename
-        let baseName = FileService.baseName(of: file)
-
         do {
             try FileService.deleteFromDisk(file)
         } catch {
             alertMessage = error.localizedDescription
         }
 
-        // Always delete matching recent items and the file record from SwiftData
-        if let recents = try? context.fetch(FetchDescriptor<RecentItem>()) {
-            for recent in recents {
-                let matchesID = recent.fileID == fileID
-                let matchesPath = recent.relativePath == relativePath || recent.relativePath == filename
-                let matchesSummary = recent.summary.contains(filename) ||
-                                     (!baseName.isEmpty && recent.summary.contains(baseName))
-                if matchesID || matchesPath || matchesSummary {
-                    context.delete(recent)
-                }
-            }
-        }
         context.delete(file)
         try? context.save()
     }

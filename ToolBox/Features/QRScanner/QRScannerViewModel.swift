@@ -64,22 +64,8 @@ final class QRScannerViewModel {
 
         lastPayload = payload
         result = BarcodeScannerService.makeCode(payload: payload, symbologyRaw: symbologyRaw)
-        if let context {
-            recordRecentItem(in: context)
-        }
         if isTorchOn { toggleTorch() }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-    }
-
-    @discardableResult
-    func recordRecentItem(in context: ModelContext) -> Bool {
-        context.insert(RecentItem(toolID: .qrBarcodeScanner, summary: "Code scanned"))
-        do {
-            try context.save()
-            return true
-        } catch {
-            return false
-        }
     }
 
     func resultDismissed() {
