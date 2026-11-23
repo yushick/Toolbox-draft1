@@ -146,29 +146,47 @@ enum ImportService {
 
     // MARK: - Summary
 
-    static func summary(for media: ImportedMedia) -> (title: String, detail: String) {
+    static func initialSummary(for media: ImportedMedia) -> (title: String, detail: String) {
         let bytes = media.items.reduce(0) {
             $0 + ((try? $1.url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
         }
         let size = bytes.formattedBytes
         switch media.kind {
         case .pdf:
-            let pages = PDFDocument(url: media.items[0].url)?.pageCount ?? 0
-            let pageText = pages > 0 ? "\(pages) page\(pages == 1 ? "" : "s") · " : ""
-            return (media.items[0].name, pageText + size)
+            return (media.items[0].name, size)
         case .image:
             if media.items.count == 1 { return (media.items[0].name, size) }
             return ("\(media.items.count) photos", size)
         }
     }
 
-    static func previewImage(for media: ImportedMedia) -> UIImage? {
+    static func summary(for media: ImportedMedia) async -> (title: String, detail: String) {
+        await Task.detached(priority: .userInitiated) {
+            let bytes = media.items.reduce(0) {
+                $0 + ((try? $1.url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+            }
+            let size = bytes.formattedBytes
+            switch media.kind {
+            case .pdf:
+                let pages = PDFDocument(url: media.items[0].url)?.pageCount ?? 0
+                let pageText = pages > 0 ? "\(pages) page\(pages == 1 ? "" : "s") · " : ""
+                return (media.items[0].name, pageText + size)
+            case .image:
+                if media.items.count == 1 { return (media.items[0].name, size) }
+                return ("\(media.items.count) photos", size)
+            }
+        }.value
+    }
+
+    static func previewImage(for media: ImportedMedia) async -> UIImage? {
         guard let first = media.items.first else { return nil }
-        switch media.kind {
-        case .image:
-            return ImageProcessingService.thumbnail(url: first.url, maxPixelSize: 240)
-        case .pdf:
-            return PDFDocument(url: first.url)?.page(at: 0)?.thumbnail(of: CGSize(width: 120, height: 160), for: .cropBox)
-        }
+        return await Task.detached(priority: .userInitiated) {
+            switch media.kind {
+            case .image:
+                return ImageProcessingService.thumbnail(url: first.url, maxPixelSize: 240)
+            case .pdf:
+                return PDFDocument(url: first.url)?.page(at: 0)?.thumbnail(of: CGSize(width: 120, height: 160), for: .cropBox)
+            }
+        }.value
     }
 }

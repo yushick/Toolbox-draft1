@@ -4,6 +4,7 @@ import PhotosUI
 import AVFoundation
 import VisionKit
 import Observation
+import SwiftData
 
 @MainActor
 @Observable
@@ -55,7 +56,7 @@ final class QRScannerViewModel {
 
     // MARK: - Results
 
-    func handleScan(payload: String, symbologyRaw: String, fromPhoto: Bool = false) {
+    func handleScan(payload: String, symbologyRaw: String, fromPhoto: Bool = false, in context: ModelContext? = nil) {
         guard result == nil, !payload.isEmpty else { return }
         // After closing a result, ignore the same code for a moment so it
         // doesn't pop straight back up while the camera is still pointed at it.
@@ -63,8 +64,22 @@ final class QRScannerViewModel {
 
         lastPayload = payload
         result = BarcodeScannerService.makeCode(payload: payload, symbologyRaw: symbologyRaw)
+        if let context {
+            recordRecentItem(in: context)
+        }
         if isTorchOn { toggleTorch() }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    @discardableResult
+    func recordRecentItem(in context: ModelContext) -> Bool {
+        context.insert(RecentItem(toolID: .qrBarcodeScanner, summary: "Code scanned"))
+        do {
+            try context.save()
+            return true
+        } catch {
+            return false
+        }
     }
 
     func resultDismissed() {
@@ -73,7 +88,7 @@ final class QRScannerViewModel {
 
     // MARK: - Photo
 
-    func scanPhoto(_ item: PhotosPickerItem) async {
+    func scanPhoto(_ item: PhotosPickerItem, in context: ModelContext? = nil) async {
         defer { photoSelection = nil }
         guard let file = try? await item.loadTransferable(type: PickedImageFile.self) else {
             alertMessage = "That photo couldn't be opened."
@@ -90,7 +105,7 @@ final class QRScannerViewModel {
             alertMessage = "No QR code or barcode was found in that photo."
             return
         }
-        handleScan(payload: first.payload, symbologyRaw: first.symbologyRaw, fromPhoto: true)
+        handleScan(payload: first.payload, symbologyRaw: first.symbologyRaw, fromPhoto: true, in: context)
     }
 
     // MARK: - Imported image
@@ -101,7 +116,7 @@ final class QRScannerViewModel {
     var isReadingImage = false
     var foundCodeInImage = false
 
-    func scanImportedImage(_ url: URL) async {
+    func scanImportedImage(_ url: URL, in context: ModelContext? = nil) async {
         isImportedMode = true
         isReadingImage = true
         defer {
@@ -113,7 +128,7 @@ final class QRScannerViewModel {
         }.value
         guard let first = found?.first else { return }
         foundCodeInImage = true
-        handleScan(payload: first.payload, symbologyRaw: first.symbologyRaw, fromPhoto: true)
+        handleScan(payload: first.payload, symbologyRaw: first.symbologyRaw, fromPhoto: true, in: context)
     }
 
     func switchToCamera() async {

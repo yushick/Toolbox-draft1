@@ -473,9 +473,24 @@ final class SettingsPersistenceTests: XCTestCase {
 
 @MainActor
 final class StorageAndHistoryTests: XCTestCase {
+    private var container: ModelContainer!
+
+    override func setUp() {
+        super.setUp()
+        container = try? ModelContainer(for: RecentItem.self, ProcessedFile.self,
+                                        configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    }
+
+    override func tearDown() {
+        container = nil
+        super.tearDown()
+    }
+
     private func makeContext() throws -> ModelContext {
-        let container = try ModelContainer(for: RecentItem.self, ProcessedFile.self,
+        if container == nil {
+            container = try ModelContainer(for: RecentItem.self, ProcessedFile.self,
                                            configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        }
         return container.mainContext
     }
 
@@ -512,6 +527,46 @@ final class StorageAndHistoryTests: XCTestCase {
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
         XCTAssertEqual(try context.fetch(FetchDescriptor<ProcessedFile>()).count, 0)
+    }
+
+    func testDeletingFileCascadesToRecentItems() throws {
+        let context = try makeContext()
+        let name = "ut-delete-cascade-\(UUID().uuidString).txt"
+        let url = FileService.documentsDirectory.appendingPathComponent(name)
+        try Data("x".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let file = ProcessedFile(filename: name, kind: .text, byteSize: 1, relativePath: name)
+        let recent = RecentItem(toolID: .ocr, summary: "Saved text", relativePath: name, fileID: file.id)
+        context.insert(file)
+        context.insert(recent)
+        try context.save()
+
+        FilesViewModel().delete(file, in: context)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ProcessedFile>()).count, 0)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<RecentItem>()).count, 0)
+    }
+
+    func testClearingGeneratedFilesCascadesToRecentItems() throws {
+        let context = try makeContext()
+        let name = "ut-clear-cascade-\(UUID().uuidString).txt"
+        let url = FileService.documentsDirectory.appendingPathComponent(name)
+        try Data("x".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let file = ProcessedFile(filename: name, kind: .text, byteSize: 1, relativePath: name)
+        let recent = RecentItem(toolID: .compressPDF, summary: "PDF compressed", relativePath: name, fileID: file.id)
+        context.insert(file)
+        context.insert(recent)
+        try context.save()
+
+        SettingsViewModel().clearGeneratedFiles([file], in: context)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ProcessedFile>()).count, 0)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<RecentItem>()).count, 0)
     }
 
     func testFilesAreSearchedAndSorted() {

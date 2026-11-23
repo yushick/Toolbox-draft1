@@ -29,9 +29,23 @@ struct PickedImageFile: Transferable {
     let url: URL
     let name: String
 
+    static var directory: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("picked", isDirectory: true)
+    }
+
+    /// Deletes all staged temporary files in `tmp/picked/`.
+    static func cleanAll() {
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    /// Deletes a specific staged temporary file.
+    static func remove(at url: URL) {
+        try? FileManager.default.removeItem(at: url)
+    }
+
     static var transferRepresentation: some TransferRepresentation {
         FileRepresentation(importedContentType: .image) { received in
-            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("picked", isDirectory: true)
+            let directory = Self.directory
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let base = received.file.deletingPathExtension().lastPathComponent
             let destination = directory.appendingPathComponent("\(UUID().uuidString)-\(received.file.lastPathComponent)")

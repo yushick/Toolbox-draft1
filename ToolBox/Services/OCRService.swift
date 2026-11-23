@@ -6,7 +6,7 @@ import PDFKit
 
 /// What to read text from. Photos arrive as temp files; camera pages
 /// arrive as images.
-enum OCRInput: @unchecked Sendable {
+enum OCRInput: Sendable {
     case file(URL)
     case image(CGImage, CGImagePropertyOrientation)
     /// One page of a PDF, rendered only when it's its turn to be read.

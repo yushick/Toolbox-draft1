@@ -17,7 +17,7 @@ struct QRScannerFlowView: View {
         content
             .task {
                 if let url = imported?.items.first?.url {
-                    await viewModel.scanImportedImage(url)
+                    await viewModel.scanImportedImage(url, in: modelContext)
                 } else {
                     await viewModel.prepareCamera()
                 }
@@ -33,17 +33,12 @@ struct QRScannerFlowView: View {
                           selection: $viewModel.photoSelection,
                           matching: .images)
             .onChange(of: viewModel.photoSelection) { _, item in
-                if let item { Task { await viewModel.scanPhoto(item) } }
+                if let item { Task { await viewModel.scanPhoto(item, in: modelContext) } }
             }
             .sheet(item: $viewModel.result, onDismiss: { viewModel.resultDismissed() }) { code in
                 ScanResultView(code: code)
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
-            }
-            .onChange(of: viewModel.result?.id) { _, newID in
-                guard newID != nil else { return }
-                modelContext.insert(RecentItem(toolID: .qrBarcodeScanner, summary: "Code scanned"))
-                try? modelContext.save()
             }
             .alert("QR & Barcode", isPresented: Binding(
                 get: { viewModel.alertMessage != nil },
@@ -119,7 +114,7 @@ struct QRScannerFlowView: View {
     private var cameraScreen: some View {
         ZStack {
             DataScannerView(isScanning: viewModel.isScanning) { payload, symbology in
-                viewModel.handleScan(payload: payload, symbologyRaw: symbology)
+                viewModel.handleScan(payload: payload, symbologyRaw: symbology, in: modelContext)
             }
             .ignoresSafeArea(edges: .bottom)
 

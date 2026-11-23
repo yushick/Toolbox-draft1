@@ -4,7 +4,7 @@ import Photos
 /// Writes generated files into the app's Documents folder, adding
 /// " (2)", " (3)"… instead of overwriting an existing file.
 enum OutputFiles {
-    static func write(_ data: Data, name: String, ext: String) throws -> URL {
+    nonisolated static func write(_ data: Data, name: String, ext: String) throws -> URL {
         let directory = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
                                                     appropriateFor: nil, create: true)
         var candidate = directory.appendingPathComponent("\(name).\(ext)")

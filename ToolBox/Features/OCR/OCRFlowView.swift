@@ -18,11 +18,11 @@ struct OCRFlowView: View {
             .task {
                 guard let imported, !didStartImport else { return }
                 didStartImport = true
-                viewModel.processImported(imported)
+                viewModel.processImported(imported, in: modelContext)
             }
             .fullScreenCover(isPresented: $viewModel.isCameraPresented) {
                 DocumentCameraView(
-                    onFinish: { viewModel.processCameraPages($0) },
+                    onFinish: { viewModel.processCameraPages($0, in: modelContext) },
                     onCancel: { viewModel.isCameraPresented = false }
                 )
                 .ignoresSafeArea()
@@ -33,13 +33,7 @@ struct OCRFlowView: View {
                           selectionBehavior: .ordered,
                           matching: .images)
             .onChange(of: viewModel.photoSelection) { _, selection in
-                if !selection.isEmpty { Task { await viewModel.processPhotos() } }
-            }
-            .onChange(of: viewModel.stage) { _, stage in
-                if stage == .result {
-                    modelContext.insert(RecentItem(toolID: .ocr, summary: "Text extracted"))
-                    try? modelContext.save()
-                }
+                if !selection.isEmpty { Task { await viewModel.processPhotos(in: modelContext) } }
             }
             .alert("Scan Text", isPresented: Binding(
                 get: { viewModel.alertMessage != nil },

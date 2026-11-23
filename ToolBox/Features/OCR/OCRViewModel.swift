@@ -54,17 +54,17 @@ final class OCRViewModel {
         }
     }
 
-    func processCameraPages(_ images: [UIImage]) {
+    func processCameraPages(_ images: [UIImage], in context: ModelContext? = nil) {
         isCameraPresented = false
         let inputs = images.compactMap(OCRService.input(from:))
         guard !inputs.isEmpty else {
             stage = .failed(message: "The scanned pages couldn't be read.")
             return
         }
-        run(inputs, cleanup: [])
+        run(inputs, cleanup: [], in: context)
     }
 
-    func processPhotos() async {
+    func processPhotos(in context: ModelContext? = nil) async {
         let items = photoSelection
         photoSelection = []
         guard !items.isEmpty else { return }
@@ -81,11 +81,11 @@ final class OCRViewModel {
             stage = .failed(message: "None of the selected photos could be opened. They may be stored in iCloud and unavailable right now.")
             return
         }
-        run(inputs, cleanup: urls)
+        run(inputs, cleanup: urls, in: context)
     }
 
     /// Starts from a file imported on Home (already in our temp folder).
-    func processImported(_ media: ImportedMedia) {
+    func processImported(_ media: ImportedMedia, in context: ModelContext? = nil) {
         let inputs: [OCRInput]
         switch media.kind {
         case .image: inputs = media.items.map { .file($0.url) }
@@ -95,12 +95,23 @@ final class OCRViewModel {
             stage = .failed(message: "That file couldn't be opened.")
             return
         }
-        run(inputs, cleanup: media.items.map(\.url))
+        run(inputs, cleanup: media.items.map(\.url), in: context)
+    }
+
+    @discardableResult
+    func recordRecentItem(in context: ModelContext) -> Bool {
+        context.insert(RecentItem(toolID: .ocr, summary: "Text extracted"))
+        do {
+            try context.save()
+            return true
+        } catch {
+            return false
+        }
     }
 
     // MARK: - Recognition
 
-    private func run(_ inputs: [OCRInput], cleanup: [URL]) {
+    private func run(_ inputs: [OCRInput], cleanup: [URL], in context: ModelContext? = nil) {
         stage = .processing(done: 0, total: inputs.count)
         task = Task {
             defer { cleanup.forEach { try? FileManager.default.removeItem(at: $0) } }
@@ -124,6 +135,9 @@ final class OCRViewModel {
                 fileName = Self.defaultName()
                 statusMessage = nil
                 stage = .result
+                if let context {
+                    recordRecentItem(in: context)
+                }
             } catch is CancellationError {
                 stage = .pick
             } catch {
@@ -145,18 +159,32 @@ final class OCRViewModel {
 
     func exportTXT(in context: ModelContext) {
         guard let data = text.data(using: .utf8) else { return }
-        export(data, ext: "txt", kind: .text, in: context)
+        Task {
+            await export(data, ext: "txt", kind: .text, in: context)
+        }
     }
 
     func exportPDF(in context: ModelContext) {
-        export(OCRService.makePDF(from: text), ext: "pdf", kind: .pdf, in: context)
+        let currentText = text
+        Task {
+            let data = await Task.detached(priority: .userInitiated) {
+                OCRService.makePDF(from: currentText)
+            }.value
+            await export(data, ext: "pdf", kind: .pdf, in: context)
+        }
     }
 
-    private func export(_ data: Data, ext: String, kind: ProcessedFileKind, in context: ModelContext) {
+    private func export(_ data: Data, ext: String, kind: ProcessedFileKind, in context: ModelContext) async {
+        let baseName = Self.sanitized(fileName)
         do {
-            let url = try OutputFiles.write(data, name: Self.sanitized(fileName), ext: ext)
-            context.insert(ProcessedFile(filename: url.lastPathComponent, kind: kind,
-                                         byteSize: data.count, relativePath: url.lastPathComponent))
+            let url = try await Task.detached(priority: .userInitiated) {
+                try OutputFiles.write(data, name: baseName, ext: ext)
+            }.value
+            let file = ProcessedFile(filename: url.lastPathComponent, kind: kind,
+                                     byteSize: data.count, relativePath: url.lastPathComponent)
+            context.insert(file)
+            context.insert(RecentItem(toolID: .ocr, summary: "Saved \(url.lastPathComponent)",
+                                      relativePath: url.lastPathComponent, fileID: file.id))
             try? context.save()
             statusMessage = "Saved \(url.lastPathComponent). It's also in your Files tab."
             ShareSheet.present([url])

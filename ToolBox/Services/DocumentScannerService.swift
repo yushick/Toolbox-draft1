@@ -10,17 +10,15 @@ enum DocumentScannerService {
 
     private static let ciContext = CIContext()
 
-    /// Applies the selected enhancement to a captured page. Runs on a
-    /// background thread; call from a Task, never directly on the
-    /// main actor for large images.
-    static func enhance(_ image: UIImage, mode: PageEnhancement) -> UIImage {
-        guard mode != .color, let cgImage = image.cgImage else { return image }
+    /// Applies the selected enhancement to a captured page CGImage.
+    nonisolated static func enhance(_ cgImage: CGImage, mode: PageEnhancement) -> CGImage {
+        guard mode != .color else { return cgImage }
         let ciImage = CIImage(cgImage: cgImage)
         let output: CIImage
 
         switch mode {
         case .color:
-            return image
+            return cgImage
 
         case .grayscale:
             let filter = CIFilter.colorControls()
@@ -45,7 +43,14 @@ enum DocumentScannerService {
             output = threshold.outputImage ?? contrasted
         }
 
-        guard let rendered = ciContext.createCGImage(output, from: output.extent) else { return image }
+        guard let rendered = ciContext.createCGImage(output, from: output.extent) else { return cgImage }
+        return rendered
+    }
+
+    /// Convenience for enhancing a UIImage using its underlying CGImage.
+    nonisolated static func enhance(_ image: UIImage, mode: PageEnhancement) -> UIImage {
+        guard mode != .color, let cgImage = image.cgImage else { return image }
+        let rendered = enhance(cgImage, mode: mode)
         return UIImage(cgImage: rendered, scale: image.scale, orientation: image.imageOrientation)
     }
 
@@ -61,34 +66,36 @@ enum DocumentScannerService {
         }
     }
 
-    /// Builds a real, valid PDF from enhanced page images — one page
-    /// per image, sized to the image's own aspect ratio at print
-    /// resolution, matching Files.app / Notes-style document scans.
-    static func createPDF(from pages: [ScannedPage], enhancement: PageEnhancement) async throws -> Data {
-        guard !pages.isEmpty else { throw ScannerError.noPages }
+    /// Builds a real, valid PDF from enhanced page images. Nonisolated and operates on Sendable CGImages.
+    nonisolated static func createPDF(from images: [CGImage], enhancement: PageEnhancement) throws -> Data {
+        guard !images.isEmpty else { throw ScannerError.noPages }
 
-        return try await Task.detached(priority: .userInitiated) {
-            let pdfData = NSMutableData()
-            UIGraphicsBeginPDFContextToData(pdfData, .zero, nil)
-            defer { UIGraphicsEndPDFContext() }
+        let pdfData = NSMutableData()
+        UIGraphicsBeginPDFContextToData(pdfData, .zero, nil)
 
-            for page in pages {
-                let enhanced = enhance(page.originalImage, mode: enhancement)
-                guard let cgImage = enhanced.cgImage else { throw ScannerError.renderingFailed }
+        for cgImage in images {
+            let enhanced = enhance(cgImage, mode: enhancement)
 
-                // A4 at 72dpi, scaled to the image's aspect ratio so
-                // portrait/landscape captures both render correctly.
-                let maxWidth: CGFloat = 595
-                let maxHeight: CGFloat = 842
-                let imageSize = CGSize(width: cgImage.width, height: cgImage.height)
-                let scale = min(maxWidth / imageSize.width, maxHeight / imageSize.height)
-                let pageSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+            // A4 at 72dpi, scaled to the image's aspect ratio so
+            // portrait/landscape captures both render correctly.
+            let maxWidth: CGFloat = 595
+            let maxHeight: CGFloat = 842
+            let imageSize = CGSize(width: enhanced.width, height: enhanced.height)
+            let scale = min(maxWidth / imageSize.width, maxHeight / imageSize.height)
+            let pageSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
 
-                UIGraphicsBeginPDFPageWithInfo(CGRect(origin: .zero, size: pageSize), nil)
-                enhanced.draw(in: CGRect(origin: .zero, size: pageSize))
-            }
+            UIGraphicsBeginPDFPageWithInfo(CGRect(origin: .zero, size: pageSize), nil)
+            UIImage(cgImage: enhanced).draw(in: CGRect(origin: .zero, size: pageSize))
+        }
 
-            return pdfData as Data
-        }.value
+        UIGraphicsEndPDFContext()
+        return pdfData as Data
+    }
+
+    /// Backwards-compatible overload for [ScannedPage] extracting CGImages.
+    nonisolated static func createPDF(from pages: [ScannedPage], enhancement: PageEnhancement) async throws -> Data {
+        let images = pages.compactMap { $0.originalImage.cgImage }
+        guard images.count == pages.count else { throw ScannerError.renderingFailed }
+        return try createPDF(from: images, enhancement: enhancement)
     }
 }

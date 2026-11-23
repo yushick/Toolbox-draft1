@@ -69,7 +69,6 @@ enum PDFCompressionService {
 
             let outputData = NSMutableData()
             UIGraphicsBeginPDFContextToData(outputData, .zero, nil)
-            defer { UIGraphicsEndPDFContext() }
 
             for index in 0..<document.pageCount {
                 guard let page = document.page(at: index) else { continue }
@@ -96,6 +95,7 @@ enum PDFCompressionService {
                 recompressed.draw(in: pageBounds)
             }
 
+            UIGraphicsEndPDFContext()
             return outputData as Data
         }.value
     }

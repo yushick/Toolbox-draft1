@@ -53,8 +53,8 @@ struct PDFCompressorFlowView: View {
                 statBefore: ByteCountFormatter.string(fromByteCount: Int64(originalBytes), countStyle: .file),
                 statAfter: ByteCountFormatter.string(fromByteCount: Int64(compressedBytes), countStyle: .file),
                 statCaption: savedCaption(original: originalBytes, compressed: compressedBytes),
-                onShare: { shareFile(fileURL) },
-                onSaveToFiles: { shareFile(fileURL) },
+                onShare: { ShareSheet.present([fileURL]) },
+                onSaveToFiles: { ShareSheet.present([fileURL]) },
                 onDone: {
                     if viewModel.recordResult(filename: filename, byteCount: compressedBytes, in: modelContext) {
                         dismiss()
@@ -155,13 +155,5 @@ struct PDFCompressorFlowView: View {
         guard original > 0 else { return "" }
         let percent = Int((1 - Double(compressed) / Double(original)) * 100)
         return percent > 0 ? "Saved \(percent)%" : "No further reduction possible"
-    }
-
-    private func shareFile(_ url: URL) {
-        let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
-            .first?.rootViewController?
-            .present(activityVC, animated: true)
     }
 }

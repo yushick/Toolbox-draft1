@@ -34,6 +34,7 @@ final class ImageResizerViewModel {
 
     var results: [ResizedImageResult] = []
     var alertMessage: String?
+    nonisolated(unsafe) private var stagedInputURLs: [URL] = []
 
     private var processingTask: Task<Void, Never>?
     private let quality = 0.9
@@ -65,6 +66,7 @@ final class ImageResizerViewModel {
         var loaded: [PickedImage] = []
         for item in selection {
             guard let file = try? await item.loadTransferable(type: PickedImageFile.self) else { continue }
+            stagedInputURLs.append(file.url)
             loaded.append(PickedImage(url: file.url, name: file.name,
                                       originalBytes: ImageProcessingService.fileSize(at: file.url),
                                       thumbnail: ImageProcessingService.thumbnail(url: file.url)))
@@ -133,6 +135,7 @@ final class ImageResizerViewModel {
         let mode = mode
         let format = format
         let quality = quality
+        let fileExt = format.fileExtension
         results = []
         stage = .processing(done: 0, total: images.count)
 
@@ -142,19 +145,21 @@ final class ImageResizerViewModel {
                 for (index, image) in images.enumerated() {
                     try Task.checkCancellation()
                     let sourceURL = image.url
-                    let output = try await Task.detached(priority: .userInitiated) {
-                        try ImageResizeService.resize(sourceURL: sourceURL, target: target, mode: mode,
-                                                      format: format, quality: quality)
+                    let imageName = image.name
+                    let (url, newSize, newBytes) = try await Task.detached(priority: .userInitiated) {
+                        let output = try ImageResizeService.resize(sourceURL: sourceURL, target: target, mode: mode,
+                                                                      format: format, quality: quality)
+                        let outputURL = try OutputFiles.write(output.data, name: "Resized \(imageName)", ext: fileExt)
+                        return (outputURL, output.size, output.data.count)
                     }.value
                     try Task.checkCancellation()
 
-                    let url = try OutputFiles.write(output.data, name: "Resized \(image.name)", ext: format.fileExtension)
                     written.append(url)
                     results.append(ResizedImageResult(
                         fileURL: url, filename: url.lastPathComponent,
                         originalPixels: ImageResizeService.orientedPixelSize(of: sourceURL) ?? .zero,
-                        newPixels: output.size,
-                        originalBytes: image.originalBytes, newBytes: output.data.count))
+                        newPixels: newSize,
+                        originalBytes: image.originalBytes, newBytes: newBytes))
                     stage = .processing(done: index + 1, total: images.count)
                 }
                 stage = .result
@@ -186,13 +191,36 @@ final class ImageResizerViewModel {
 
     @discardableResult
     func recordResults(in context: ModelContext) -> Bool {
-        for result in results {
-            context.insert(ProcessedFile(filename: result.filename, kind: .image,
-                                         byteSize: result.newBytes, relativePath: result.fileURL.lastPathComponent))
+        var firstRelativePath: String?
+        var firstFileID: UUID?
+        for (index, result) in results.enumerated() {
+            let relativePath = result.fileURL.lastPathComponent
+            let file = ProcessedFile(filename: result.filename, kind: .image,
+                                     byteSize: result.newBytes, relativePath: relativePath)
+            context.insert(file)
+            if index == 0 {
+                firstRelativePath = relativePath
+                firstFileID = file.id
+            }
         }
         context.insert(RecentItem(toolID: .resizeImage,
-                                  summary: results.count == 1 ? "Image resized" : "\(results.count) images resized"))
+                                  summary: results.count == 1 ? "Image resized" : "\(results.count) images resized",
+                                  relativePath: firstRelativePath,
+                                  fileID: firstFileID))
         do { try context.save(); return true } catch { return false }
+    }
+
+    func cleanupInputFiles() {
+        for url in stagedInputURLs {
+            PickedImageFile.remove(at: url)
+        }
+        stagedInputURLs.removeAll()
+    }
+
+    deinit {
+        for url in stagedInputURLs {
+            PickedImageFile.remove(at: url)
+        }
     }
 
     private static func friendlyMessage(for error: Error) -> String {

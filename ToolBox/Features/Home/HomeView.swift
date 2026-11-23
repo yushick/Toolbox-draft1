@@ -9,6 +9,10 @@ struct HomeView: View {
     private var recentItems: [RecentItem]
     @Environment(\.modelContext) private var modelContext
 
+    private var visibleRecentItems: [RecentItem] {
+        recentItems.filter(\.isFileAvailable)
+    }
+
     /// Set by the environment / coordinator; kept simple here as a
     /// closure so Stage 1 doesn't need full navigation wired yet.
     var onSelectTool: (Tool) -> Void = { _ in }
@@ -40,7 +44,7 @@ struct HomeView: View {
                                        onPhotos: { isPhotoPickerPresented = true },
                                        onFiles: { isFileImporterPresented = true })
                             .padding(.horizontal, AppSpacing.lg)
-                        if !recentItems.isEmpty {
+                        if !visibleRecentItems.isEmpty {
                             recentSection
                         }
                         toolsSections
@@ -49,9 +53,12 @@ struct HomeView: View {
                 .padding(.vertical, AppSpacing.lg)
             }
             .background(AppColors.background)
-            .navigationBarHidden(true)
+            .toolbar(.hidden, for: .navigationBar)
             .animation(.snappy, value: viewModel.searchText)
             .modifier(importModifiers)
+            .onAppear {
+                purgeOrphanedRecents()
+            }
         }
     }
 
@@ -84,10 +91,10 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             SectionHeader(title: "Recent")
             VStack(spacing: 0) {
-                ForEach(recentItems.prefix(3)) { item in
+                ForEach(visibleRecentItems.prefix(3)) { item in
                     RecentFileRow(icon: iconFor(item), name: item.summary,
                                   detail: item.timestamp.relativeDescription)
-                    if item.id != recentItems.prefix(3).last?.id {
+                    if item.id != visibleRecentItems.prefix(3).last?.id {
                         Divider().padding(.leading, 62)
                     }
                 }
@@ -160,6 +167,17 @@ struct HomeView: View {
 
     private func iconFor(_ item: RecentItem) -> String {
         Tool.all.first(where: { $0.id.rawValue == item.toolID })?.icon ?? "clock"
+    }
+
+    private func purgeOrphanedRecents() {
+        var didDelete = false
+        for item in recentItems where !item.isFileAvailable {
+            modelContext.delete(item)
+            didDelete = true
+        }
+        if didDelete {
+            try? modelContext.save()
+        }
     }
 }
 

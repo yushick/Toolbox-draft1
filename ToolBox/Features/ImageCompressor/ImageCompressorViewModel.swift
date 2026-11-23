@@ -32,6 +32,7 @@ final class ImageCompressorViewModel {
 
     private var estimateTask: Task<Void, Never>?
     private var processingTask: Task<Void, Never>?
+    nonisolated(unsafe) private var stagedInputURLs: [URL] = []
 
     // MARK: - Derived
 
@@ -57,6 +58,7 @@ final class ImageCompressorViewModel {
 
         for item in selection {
             guard let file = try? await item.loadTransferable(type: PickedImageFile.self) else { continue }
+            stagedInputURLs.append(file.url)
             let bytes = ImageProcessingService.fileSize(at: file.url)
             loaded.append(PickedImage(url: file.url, name: file.name, originalBytes: bytes,
                                       thumbnail: ImageProcessingService.thumbnail(url: file.url)))
@@ -121,6 +123,7 @@ final class ImageCompressorViewModel {
         let format = format
         let quality = quality
         let maxPixels = maxDimension.pixels
+        let fileExt = format.fileExtension
         results = []
         stage = .processing(done: 0, total: images.count)
 
@@ -130,17 +133,19 @@ final class ImageCompressorViewModel {
                 for (index, image) in images.enumerated() {
                     try Task.checkCancellation()
                     let sourceURL = image.url
-                    let data = try await Task.detached(priority: .userInitiated) {
-                        try ImageProcessingService.compress(sourceURL: sourceURL, format: format,
-                                                            quality: quality, maxPixelSize: maxPixels)
+                    let imageName = image.name
+                    let (url, compressedBytes) = try await Task.detached(priority: .userInitiated) {
+                        let data = try ImageProcessingService.compress(sourceURL: sourceURL, format: format,
+                                                                       quality: quality, maxPixelSize: maxPixels)
+                        let outputURL = try OutputFiles.write(data, name: "Compressed \(imageName)", ext: fileExt)
+                        return (outputURL, data.count)
                     }.value
                     try Task.checkCancellation()
 
-                    let url = try Self.write(data, name: "Compressed \(image.name)", ext: format.fileExtension)
                     written.append(url)
                     results.append(CompressedImageResult(fileURL: url, filename: url.lastPathComponent,
                                                          originalBytes: image.originalBytes,
-                                                         compressedBytes: data.count))
+                                                         compressedBytes: compressedBytes))
                     stage = .processing(done: index + 1, total: images.count)
                 }
                 stage = .result
@@ -189,13 +194,36 @@ final class ImageCompressorViewModel {
     /// Records metadata and saves explicitly (the sheet dismisses right after).
     @discardableResult
     func recordResults(in context: ModelContext) -> Bool {
-        for result in results {
-            context.insert(ProcessedFile(filename: result.filename, kind: .image,
-                                         byteSize: result.compressedBytes, relativePath: result.fileURL.lastPathComponent))
+        var firstRelativePath: String?
+        var firstFileID: UUID?
+        for (index, result) in results.enumerated() {
+            let relativePath = result.fileURL.lastPathComponent
+            let file = ProcessedFile(filename: result.filename, kind: .image,
+                                     byteSize: result.compressedBytes, relativePath: relativePath)
+            context.insert(file)
+            if index == 0 {
+                firstRelativePath = relativePath
+                firstFileID = file.id
+            }
         }
         context.insert(RecentItem(toolID: .compressImage,
-                                  summary: results.count == 1 ? "Image compressed" : "\(results.count) images compressed"))
+                                  summary: results.count == 1 ? "Image compressed" : "\(results.count) images compressed",
+                                  relativePath: firstRelativePath,
+                                  fileID: firstFileID))
         do { try context.save(); return true } catch { return false }
+    }
+
+    func cleanupInputFiles() {
+        for url in stagedInputURLs {
+            PickedImageFile.remove(at: url)
+        }
+        stagedInputURLs.removeAll()
+    }
+
+    deinit {
+        for url in stagedInputURLs {
+            PickedImageFile.remove(at: url)
+        }
     }
 
     // MARK: - Helpers
@@ -206,18 +234,5 @@ final class ImageCompressorViewModel {
             return "There isn't enough free storage on your iPhone to save these images."
         }
         return error.localizedDescription
-    }
-
-    private static func write(_ data: Data, name: String, ext: String) throws -> URL {
-        let directory = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
-                                                    appropriateFor: nil, create: true)
-        var candidate = directory.appendingPathComponent("\(name).\(ext)")
-        var counter = 2
-        while FileManager.default.fileExists(atPath: candidate.path) {
-            candidate = directory.appendingPathComponent("\(name) (\(counter)).\(ext)")
-            counter += 1
-        }
-        try data.write(to: candidate, options: .atomic)
-        return candidate
     }
 }

@@ -7,7 +7,16 @@ struct ImportActionsSheet: View {
     var onChoose: (Tool) -> Void
     var onCancel: () -> Void
 
-    private var summary: (title: String, detail: String) { ImportService.summary(for: media) }
+    @State private var summary: (title: String, detail: String)
+    @State private var previewImage: UIImage?
+
+    init(media: ImportedMedia, onChoose: @escaping (Tool) -> Void, onCancel: @escaping () -> Void) {
+        self.media = media
+        self.onChoose = onChoose
+        self.onCancel = onCancel
+        _summary = State(initialValue: ImportService.initialSummary(for: media))
+    }
+
     private var actions: [ImportAction] { ImportService.actions(for: media) }
 
     var body: some View {
@@ -54,13 +63,20 @@ struct ImportActionsSheet: View {
                 }
             }
         }
+        .task {
+            async let fullSummary = ImportService.summary(for: media)
+            async let image = ImportService.previewImage(for: media)
+            let (loadedSummary, loadedImage) = await (fullSummary, image)
+            self.summary = loadedSummary
+            self.previewImage = loadedImage
+        }
     }
 
     private var fileHeader: some View {
         HStack(spacing: AppSpacing.md) {
             Group {
-                if let image = ImportService.previewImage(for: media) {
-                    Image(uiImage: image).resizable().scaledToFill()
+                if let previewImage {
+                    Image(uiImage: previewImage).resizable().scaledToFill()
                 } else {
                     Image(systemName: media.kind == .pdf ? "doc.fill" : "photo.fill")
                         .font(.system(size: 24))

@@ -33,6 +33,11 @@ enum FileService {
         FileManager.default.fileExists(atPath: url(for: file).path)
     }
 
+    static func exists(relativePath: String) -> Bool {
+        let url = documentsDirectory.appendingPathComponent(relativePath)
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
     /// Name without extension, ready for the rename field.
     static func baseName(of file: ProcessedFile) -> String {
         (file.filename as NSString).deletingPathExtension

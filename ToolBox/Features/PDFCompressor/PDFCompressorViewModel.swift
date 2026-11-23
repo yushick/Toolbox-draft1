@@ -3,6 +3,7 @@ import SwiftUI
 import Observation
 import SwiftData
 
+@MainActor
 @Observable
 final class PDFCompressorViewModel {
     enum Stage: Equatable {
@@ -16,10 +17,24 @@ final class PDFCompressorViewModel {
     var stage: Stage = .pickFile
     var isFileImporterPresented = false
     var sourceURL: URL?
+    nonisolated(unsafe) private var stagedTempURL: URL?
     var originalBytes: Int = 0
     var mode: CompressionMode = .quality(AppPreferences.defaultPDFCompression)
     var customTargetMB: Double = 2.0
     var outputName: String = ""
+
+    func cleanupStagedFile() {
+        if let stagedTempURL {
+            try? FileManager.default.removeItem(at: stagedTempURL)
+            self.stagedTempURL = nil
+        }
+    }
+
+    deinit {
+        if let stagedTempURL {
+            try? FileManager.default.removeItem(at: stagedTempURL)
+        }
+    }
 
     func handlePickedFile(_ url: URL) {
         // Security-scoped access is required for files picked via
@@ -30,10 +45,13 @@ final class PDFCompressorViewModel {
         }
         defer { url.stopAccessingSecurityScopedResource() }
 
+        cleanupStagedFile()
+
         // Copy into a temp location so we still have access after
         // the security scope above ends.
-        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
-        try? FileManager.default.removeItem(at: temp)
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("pdf-compressor", isDirectory: true)
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let temp = tempDir.appendingPathComponent("\(UUID().uuidString)-\(url.lastPathComponent)")
         do {
             try FileManager.default.copyItem(at: url, to: temp)
         } catch {
@@ -41,9 +59,10 @@ final class PDFCompressorViewModel {
             return
         }
 
+        stagedTempURL = temp
         sourceURL = temp
         originalBytes = PDFCompressionService.fileSize(at: temp)
-        outputName = "Compressed \(temp.deletingPathExtension().lastPathComponent)"
+        outputName = "Compressed \(url.deletingPathExtension().lastPathComponent)"
         stage = .configure
     }
 
@@ -68,8 +87,11 @@ final class PDFCompressorViewModel {
                 data = try await PDFCompressionService.compress(url: sourceURL, target: target)
             }
 
-            let requestedName = "\(Self.sanitized(outputName)).pdf"
-            let outputURL = try Self.write(data, filename: requestedName)
+            let baseName = Self.sanitized(outputName)
+            let outputURL = try await Task.detached(priority: .userInitiated) {
+                try OutputFiles.write(data, name: baseName, ext: "pdf")
+            }.value
+            cleanupStagedFile()
             // Use the name actually written (it gets " (2)" added if the name was taken).
             stage = .result(fileURL: outputURL, filename: outputURL.lastPathComponent,
                             originalBytes: originalBytes, compressedBytes: data.count)
@@ -82,8 +104,10 @@ final class PDFCompressorViewModel {
     /// sheet dismisses right after this call.
     @discardableResult
     func recordResult(filename: String, byteCount: Int, in context: ModelContext) -> Bool {
-        context.insert(ProcessedFile(filename: filename, kind: .pdf, byteSize: byteCount, relativePath: filename))
-        context.insert(RecentItem(toolID: .compressPDF, summary: "PDF compressed"))
+        cleanupStagedFile()
+        let file = ProcessedFile(filename: filename, kind: .pdf, byteSize: byteCount, relativePath: filename)
+        context.insert(file)
+        context.insert(RecentItem(toolID: .compressPDF, summary: "PDF compressed", relativePath: filename, fileID: file.id))
         do {
             try context.save()
             return true
@@ -102,22 +126,5 @@ final class PDFCompressorViewModel {
         let invalidCharacters = CharacterSet(charactersIn: "/\\:*?\"<>|")
         let cleaned = trimmed.components(separatedBy: invalidCharacters).joined(separator: "-")
         return cleaned.isEmpty ? "Compressed" : cleaned
-    }
-
-    /// Writes to the sandbox Documents directory, uniquing the name
-    /// instead of silently overwriting an existing file.
-    private static func write(_ data: Data, filename: String) throws -> URL {
-        let directory = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
-                                                       appropriateFor: nil, create: true)
-        let base = (filename as NSString).deletingPathExtension
-        let ext = (filename as NSString).pathExtension
-        var candidate = directory.appendingPathComponent(filename)
-        var counter = 2
-        while FileManager.default.fileExists(atPath: candidate.path) {
-            candidate = directory.appendingPathComponent("\(base) (\(counter)).\(ext)")
-            counter += 1
-        }
-        try data.write(to: candidate, options: .atomic)
-        return candidate
     }
 }

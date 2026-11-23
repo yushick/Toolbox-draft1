@@ -98,16 +98,11 @@ final class FilesViewModel {
         ShareSheet.present([FileService.url(for: file)])
     }
 
-    /// Opens the Files app at this file's location. Needs file sharing
-    /// enabled (the two Info keys from Stage 3); otherwise falls back to the share sheet.
+    /// Presents the native iOS share sheet (which includes "Save to Files").
     func openInFiles(_ file: ProcessedFile) {
         guard FileService.exists(file) else { alertMessage = FileService.FileError.missing.localizedDescription; return }
         let url = FileService.url(for: file)
-        let filesURL = URL(string: url.absoluteString.replacingOccurrences(of: "file://", with: "shareddocuments://"))
-        guard let filesURL else { ShareSheet.present([url]); return }
-        UIApplication.shared.open(filesURL) { opened in
-            if !opened { Task { @MainActor in ShareSheet.present([url]) } }
-        }
+        ShareSheet.present([url])
     }
 
     func beginRename(_ file: ProcessedFile) {
@@ -127,12 +122,30 @@ final class FilesViewModel {
 
     func delete(_ file: ProcessedFile, in context: ModelContext) {
         fileToDelete = nil
+        let relativePath = file.relativePath
+        let fileID = file.id
+        let filename = file.filename
+        let baseName = FileService.baseName(of: file)
+
         do {
             try FileService.deleteFromDisk(file)
-            context.delete(file)
-            try? context.save()
         } catch {
             alertMessage = error.localizedDescription
         }
+
+        // Always delete matching recent items and the file record from SwiftData
+        if let recents = try? context.fetch(FetchDescriptor<RecentItem>()) {
+            for recent in recents {
+                let matchesID = recent.fileID == fileID
+                let matchesPath = recent.relativePath == relativePath || recent.relativePath == filename
+                let matchesSummary = recent.summary.contains(filename) ||
+                                     (!baseName.isEmpty && recent.summary.contains(baseName))
+                if matchesID || matchesPath || matchesSummary {
+                    context.delete(recent)
+                }
+            }
+        }
+        context.delete(file)
+        try? context.save()
     }
 }

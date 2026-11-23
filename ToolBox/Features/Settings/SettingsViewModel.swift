@@ -18,7 +18,10 @@ final class SettingsViewModel {
     /// Clears the Recent list on Home. Files themselves are untouched.
     func clearRecentHistory(in context: ModelContext) {
         do {
-            try context.delete(model: RecentItem.self)
+            let items = try context.fetch(FetchDescriptor<RecentItem>())
+            for item in items {
+                context.delete(item)
+            }
             try context.save()
             message = "Recent history cleared."
         } catch {
@@ -31,14 +34,27 @@ final class SettingsViewModel {
     func clearGeneratedFiles(_ files: [ProcessedFile], in context: ModelContext) {
         var removed = 0
         var failed = 0
+        let recents = (try? context.fetch(FetchDescriptor<RecentItem>())) ?? []
         for file in files {
             do {
                 try FileService.deleteFromDisk(file)
-                context.delete(file)
                 removed += 1
             } catch {
                 failed += 1
             }
+
+            let filename = file.filename
+            let baseName = FileService.baseName(of: file)
+            for recent in recents {
+                let matchesID = recent.fileID == file.id
+                let matchesPath = recent.relativePath == file.relativePath || recent.relativePath == filename
+                let matchesSummary = recent.summary.contains(filename) ||
+                                     (!baseName.isEmpty && recent.summary.contains(baseName))
+                if matchesID || matchesPath || matchesSummary {
+                    context.delete(recent)
+                }
+            }
+            context.delete(file)
         }
         try? context.save()
 

@@ -55,8 +55,8 @@ struct ScannerFlowView: View {
                 message: "Your document was saved as a PDF.",
                 statBefore: nil, statAfter: ByteCountFormatter.string(fromByteCount: Int64(byteCount), countStyle: .file),
                 statCaption: filename,
-                onShare: { shareFile(fileURL) },
-                onSaveToFiles: { shareFile(fileURL) }, // system share sheet includes "Save to Files"
+                onShare: { ShareSheet.present([fileURL]) },
+                onSaveToFiles: { ShareSheet.present([fileURL]) }, // system share sheet includes "Save to Files"
                 onDone: {
                     if viewModel.recordResult(fileURL: fileURL, filename: filename, byteCount: byteCount, in: modelContext) {
                         dismiss()
@@ -100,7 +100,7 @@ struct ScannerFlowView: View {
                     }
                     Section("Scanned Document") {
                         ForEach(viewModel.pages) { page in
-                            PageRow(page: page, enhancement: viewModel.enhancement) {
+                            PageRow(page: page, thumbnail: viewModel.thumbnail(for: page)) {
                                 viewModel.retake(page)
                             }
                         }
@@ -137,29 +137,29 @@ struct ScannerFlowView: View {
             }
         }
     }
-
-    private func shareFile(_ url: URL) {
-        let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
-            .first?.rootViewController?
-            .present(activityVC, animated: true)
-    }
 }
 
 private struct PageRow: View {
     let page: ScannedPage
-    let enhancement: PageEnhancement
+    let thumbnail: UIImage?
     let onRetake: () -> Void
 
     var body: some View {
         HStack(spacing: AppSpacing.md) {
-            Image(uiImage: DocumentScannerService.enhance(page.originalImage, mode: enhancement))
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 44, height: 58)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(AppColors.cardStroke, lineWidth: 1))
+            Group {
+                if let thumbnail {
+                    Image(uiImage: thumbnail)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(AppColors.secondaryCard)
+                        .overlay(ProgressView().controlSize(.small))
+                }
+            }
+            .frame(width: 44, height: 58)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(AppColors.cardStroke, lineWidth: 1))
 
             Text("Page").appBody()
             Spacer()
