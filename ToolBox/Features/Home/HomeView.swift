@@ -25,6 +25,10 @@ struct HomeView: View {
     @State private var isImporting = false
     @State private var importAlert: String?
 
+    // Card order (long-press a card and drag to rearrange)
+    @AppStorage(ToolOrder.storageKey) private var toolOrderRaw = ""
+    @State private var dropTarget: ToolID?
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -44,11 +48,12 @@ struct HomeView: View {
                             recentSection
                         }
                         toolsSections
+                        AppFooter()
                     }
                 }
                 .padding(.vertical, AppSpacing.lg)
             }
-            .background(AppColors.background)
+            .background(HomeGradientBackground())
             .navigationBarHidden(true)
             .animation(.snappy, value: viewModel.searchText)
             .modifier(importModifiers)
@@ -102,36 +107,92 @@ struct HomeView: View {
     }
 
     private var toolsSections: some View {
-        ForEach(ToolCategory.allCases, id: \.self) { category in
+        let ordered = ToolOrder.sorted(Tool.all, raw: toolOrderRaw)
+        return ForEach(ToolCategory.allCases, id: \.self) { category in
+            let primary = ordered.filter { $0.isPrimary && $0.category == category }
+            let secondary = ordered.filter { !$0.isPrimary && $0.category == category }
+
             VStack(alignment: .leading, spacing: AppSpacing.sm) {
                 SectionHeader(title: category.rawValue)
 
                 // Primary (hero) tools for this category get the large card.
-                ForEach(viewModel.primaryTools.filter { $0.category == category }) { tool in
-                    Button { onSelectTool(tool) } label: {
-                        LargeToolCard(tool: tool)
+                ForEach(primary) { tool in
+                    reorderable(tool, in: primary, cornerRadius: AppRadius.large) {
+                        Button { onSelectTool(tool) } label: {
+                            LargeToolCard(tool: tool)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                     .padding(.horizontal, AppSpacing.lg)
                 }
 
                 // Remaining tools shown two-up in an adaptive grid.
-                let secondary = viewModel.tools(in: category)
                 if !secondary.isEmpty {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: AppSpacing.md),
                                          GridItem(.flexible(), spacing: AppSpacing.md)],
                               spacing: AppSpacing.md) {
                         ForEach(secondary) { tool in
-                            Button { onSelectTool(tool) } label: {
-                                ToolCard(tool: tool)
+                            reorderable(tool, in: secondary, cornerRadius: AppRadius.medium) {
+                                Button { onSelectTool(tool) } label: {
+                                    ToolCard(tool: tool)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, AppSpacing.lg)
                 }
             }
         }
+    }
+
+    /// Makes a card draggable and a drop target for the other cards in its
+    /// group (same category and size). Tapping still opens the tool.
+    private func reorderable<Content: View>(_ tool: Tool,
+                                            in group: [Tool],
+                                            cornerRadius: CGFloat,
+                                            @ViewBuilder content: () -> Content) -> some View {
+        let isTarget = dropTarget == tool.id
+        return content()
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(AppColors.accent, lineWidth: 2)
+                    .opacity(isTarget ? 1 : 0)
+                    .allowsHitTesting(false)
+            }
+            .scaleEffect(isTarget ? 1.02 : 1)
+            .animation(.easeOut(duration: 0.15), value: isTarget)
+            .draggable(tool.id.rawValue) {
+                ToolDragPreview(tool: tool)
+            }
+            .dropDestination(for: String.self) { items, _ in
+                guard let raw = items.first,
+                      let dragged = ToolID(rawValue: raw),
+                      dragged != tool.id,
+                      group.contains(where: { $0.id == dragged }) else { return false }
+                move(dragged, onto: tool.id)
+                return true
+            } isTargeted: { targeted in
+                if targeted { dropTarget = tool.id }
+                else if dropTarget == tool.id { dropTarget = nil }
+            }
+            // VoiceOver alternative to dragging.
+            .accessibilityAction(named: "Move earlier") { shift(tool, by: -1, in: group) }
+            .accessibilityAction(named: "Move later") { shift(tool, by: 1, in: group) }
+    }
+
+    private func move(_ dragged: ToolID, onto target: ToolID) {
+        withAnimation(.snappy) {
+            toolOrderRaw = ToolOrder.moving(dragged, onto: target, raw: toolOrderRaw)
+        }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+
+    private func shift(_ tool: Tool, by offset: Int, in group: [Tool]) {
+        guard let index = group.firstIndex(where: { $0.id == tool.id }) else { return }
+        let newIndex = index + offset
+        guard group.indices.contains(newIndex) else { return }
+        move(tool.id, onto: group[newIndex].id)
     }
 
     private var searchResultsSection: some View {
@@ -170,6 +231,27 @@ private extension Date {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
         return formatter.localizedString(for: self, relativeTo: .now)
+    }
+}
+
+/// What follows your finger while you drag a card.
+private struct ToolDragPreview: View {
+    let tool: Tool
+
+    var body: some View {
+        HStack(spacing: AppSpacing.md) {
+            Image(systemName: tool.icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(AppColors.ink)
+                .frame(width: 36, height: 36)
+                .background(AppColors.accent, in: RoundedRectangle(cornerRadius: AppRadius.small, style: .continuous))
+            Text(tool.title).appHeadline()
+        }
+        .padding(.vertical, AppSpacing.sm)
+        .padding(.leading, AppSpacing.sm)
+        .padding(.trailing, AppSpacing.lg)
+        .background(AppColors.card, in: Capsule())
+        .overlay(Capsule().strokeBorder(AppColors.accent.opacity(0.6), lineWidth: 1))
     }
 }
 

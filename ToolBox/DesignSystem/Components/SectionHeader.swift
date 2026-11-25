@@ -6,18 +6,23 @@ struct SectionHeader: View {
     var action: (() -> Void)? = nil
 
     var body: some View {
-        HStack {
-            Text(title.uppercased())
-                .font(.system(.footnote, design: .rounded, weight: .semibold))
-                .foregroundStyle(AppColors.secondary)
-                .tracking(0.5)
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .appSectionTitle()
+                .accessibilityAddTraits(.isHeader)
             Spacer()
             if let actionTitle, let action {
-                Button(actionTitle, action: action)
-                    .font(.system(.footnote, weight: .semibold))
+                Button(action: action) {
+                    HStack(spacing: 2) {
+                        Text(actionTitle)
+                        Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold))
+                    }
+                    .font(.system(.subheadline, weight: .semibold))
+                    .foregroundStyle(AppColors.secondary)
+                    .frame(minHeight: 44)
+                }
             }
         }
         .padding(.horizontal, AppSpacing.lg)
-        .accessibilityAddTraits(.isHeader)
     }
 }

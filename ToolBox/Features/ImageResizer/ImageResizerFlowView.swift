@@ -143,10 +143,10 @@ struct ImageResizerFlowView: View {
                         .font(.system(.subheadline, weight: .semibold))
                     Text(preset.subtitle)
                         .font(.system(.caption))
-                        .foregroundStyle(isSelected ? Color.white.opacity(0.85) : AppColors.secondary)
+                        .foregroundStyle(isSelected ? AppColors.ink.opacity(0.7) : AppColors.secondary)
                 }
             }
-            .foregroundStyle(isSelected ? Color.white : AppColors.primary)
+            .foregroundStyle(isSelected ? AppColors.ink : AppColors.primary)
             .padding(.horizontal, AppSpacing.lg)
             .padding(.vertical, AppSpacing.md)
             .frame(minWidth: 120, minHeight: 100, alignment: .topLeading)

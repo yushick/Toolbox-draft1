@@ -13,16 +13,19 @@ struct ProcessingView: View {
 
     var body: some View {
         VStack(spacing: AppSpacing.xl) {
-            Text(title).appHeadline()
+            Text(title).appSectionTitle()
 
             if let progress {
-                ProgressView(value: progress)
-                    .tint(AppColors.accent)
-                    .frame(maxWidth: 240)
-                Text("\(Int(progress * 100))%")
-                    .appSecondary()
-                    .contentTransition(.numericText())
-                    .animation(.snappy, value: progress)
+                VStack(spacing: AppSpacing.lg) {
+                    Text("\(Int(progress * 100))%")
+                        .font(AppFont.numeral())
+                        .foregroundStyle(AppColors.accent)
+                        .contentTransition(.numericText())
+                        .animation(.snappy, value: progress)
+
+                    ProgressTrack(value: progress)
+                        .frame(maxWidth: 260, minHeight: 8, maxHeight: 8)
+                }
             } else {
                 ProgressView()
                     .tint(AppColors.accent)
@@ -36,6 +39,7 @@ struct ProcessingView: View {
             if let onCancel {
                 Button("Cancel", role: .cancel, action: onCancel)
                     .font(.system(.subheadline, weight: .semibold))
+                    .foregroundStyle(AppColors.secondary)
                     .frame(minWidth: 44, minHeight: 44)
                     .padding(.top, AppSpacing.xs)
             }
@@ -44,5 +48,23 @@ struct ProcessingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColors.background)
         .accessibilityElement(children: .combine)
+        .accessibilityValue(progress.map { "\(Int($0 * 100)) percent" } ?? "In progress")
+    }
+}
+
+/// Slim capsule progress bar in the accent colour.
+private struct ProgressTrack: View {
+    let value: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(AppColors.secondaryCard)
+                Capsule()
+                    .fill(AppColors.accent)
+                    .frame(width: max(8, proxy.size.width * min(max(value, 0), 1)))
+                    .animation(.easeOut(duration: 0.2), value: value)
+            }
+        }
     }
 }

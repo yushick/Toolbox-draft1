@@ -122,7 +122,7 @@ struct FilesView: View {
                 } label: {
                     Label("Rename", systemImage: "pencil")
                 }
-                .tint(AppColors.accent)
+                .tint(AppColors.blockBlue)
             }
         }
         .swipeActions(edge: .leading) {
@@ -132,7 +132,7 @@ struct FilesView: View {
                 } label: {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
-                .tint(.blue)
+                .tint(AppColors.blockOrange)
             }
         }
         .contextMenu {

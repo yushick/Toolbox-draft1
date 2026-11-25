@@ -2,7 +2,7 @@ import Foundation
 import UniformTypeIdentifiers
 import UIKit
 import PDFKit
-import SwiftUI
+import CoreTransferable
 
 enum ImportKind: Sendable { case pdf, image }
 
@@ -40,7 +40,10 @@ struct DroppedFile: Transferable {
     let url: URL
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(importedContentType: .item) { received in
+        FileRepresentation(importedContentType: .pdf) { received in
+            DroppedFile(url: try ImportService.copyIn(received.file))
+        }
+        FileRepresentation(importedContentType: .image) { received in
             DroppedFile(url: try ImportService.copyIn(received.file))
         }
     }

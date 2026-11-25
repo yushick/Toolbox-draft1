@@ -6,6 +6,8 @@ import StoreKit
 /// immediately and are remembered between launches.
 struct SettingsView: View {
     @AppStorage(PreferenceKey.appearance) private var appearance: AppAppearance = .system
+    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .default
+    @AppStorage(ToolOrder.storageKey) private var toolOrder = ""
     @AppStorage(PreferenceKey.imageQuality) private var imageQuality = AppPreferences.fallbackImageQuality
     @AppStorage(PreferenceKey.pdfCompression) private var pdfCompression: CompressionQuality = .balanced
 
@@ -64,6 +66,11 @@ struct SettingsView: View {
                 ForEach(AppAppearance.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
+
+            ThemeColorPicker(selection: $theme)
+
+            Button("Reset Card Order") { toolOrder = "" }
+                .disabled(toolOrder.isEmpty)
         }
     }
 

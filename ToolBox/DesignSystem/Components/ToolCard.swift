@@ -1,39 +1,34 @@
 import SwiftUI
 
-/// Compact card used for secondary tools, shown two-up in a grid.
+/// Compact Liquid Glass card used for secondary tools, shown two-up in a grid.
 struct ToolCard: View {
     let tool: Tool
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
             Image(systemName: tool.icon)
-                .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(AppColors.accent)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(AppColors.ink)
                 .frame(width: 40, height: 40)
-                .background(AppColors.accentSoft, in: RoundedRectangle(cornerRadius: AppRadius.small))
+                .background(AppColors.accent, in: RoundedRectangle(cornerRadius: AppRadius.small, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(tool.title).appHeadline()
-                Text(tool.subtitle).appCaption()
+                Text(tool.subtitle).appSecondary()
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
         }
         .padding(AppSpacing.lg)
         .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
-        .background(AppColors.card, in: RoundedRectangle(cornerRadius: AppRadius.medium, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: AppRadius.medium, style: .continuous)
-                .strokeBorder(AppColors.cardStroke, lineWidth: 1)
-        )
-        .cardShadow()
+        .liquidGlass(cornerRadius: AppRadius.medium, tint: AppColors.accent.opacity(0.08))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
     }
 }
 
-/// Large "hero" card used for the top-priority tools (Scan Document,
-/// Compress PDF) — visually bigger per the product spec.
+/// Large Liquid Glass "hero" card used for the top-priority tools
+/// (Scan Document, Compress PDF).
 struct LargeToolCard: View {
     let tool: Tool
 
@@ -45,19 +40,14 @@ struct LargeToolCard: View {
             }
             Spacer(minLength: AppSpacing.md)
             Image(systemName: tool.icon)
-                .font(.system(size: 34, weight: .medium))
-                .foregroundStyle(AppColors.accent)
-                .frame(width: 56, height: 56)
-                .background(AppColors.accentSoft, in: RoundedRectangle(cornerRadius: AppRadius.small))
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(AppColors.ink)
+                .frame(width: 60, height: 60)
+                .background(AppColors.accent, in: RoundedRectangle(cornerRadius: AppRadius.small + 4, style: .continuous))
         }
         .padding(AppSpacing.xl)
         .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-        .background(AppColors.card, in: RoundedRectangle(cornerRadius: AppRadius.large, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: AppRadius.large, style: .continuous)
-                .strokeBorder(AppColors.cardStroke, lineWidth: 1)
-        )
-        .cardShadow()
+        .liquidGlass(cornerRadius: AppRadius.large, tint: AppColors.accent.opacity(0.09))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
     }

@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @State private var appState = AppState()
     @AppStorage(PreferenceKey.appearance) private var appearance: AppAppearance = .system
+    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .default
     @AppStorage(OnboardingState.completedKey) private var hasCompletedOnboarding = false
 
     var body: some View {
@@ -20,6 +21,9 @@ struct ContentView: View {
                 .tabItem { Label("Settings", systemImage: "gearshape") }
                 .tag(AppState.Tab.settings)
         }
+        // Rebuild the tab tree when the theme changes so every view picks up
+        // the new colour (the colours are read when each view is created).
+        .id(theme)
         .tint(AppColors.accent)
         .preferredColorScheme(appearance.colorScheme)
         .fullScreenCover(isPresented: Binding(
