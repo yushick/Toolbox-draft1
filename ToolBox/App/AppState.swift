@@ -6,7 +6,7 @@ import UIKit
 @MainActor
 @Observable
 final class AppState {
-    enum Tab: Hashable { case home, files, settings, tools }
+    enum Tab: Hashable { case home, tools, files, quickActions }
 
     var selectedTab: Tab = .home
     var presentedTool: Tool? = nil

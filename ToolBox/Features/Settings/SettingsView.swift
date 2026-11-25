@@ -5,6 +5,8 @@ import StoreKit
 /// Stage 9: Settings. Appearance and processing defaults take effect
 /// immediately and are remembered between launches.
 struct SettingsView: View {
+    var showsCloseButton: Bool = false
+
     @AppStorage(PreferenceKey.appearance) private var appearance: AppAppearance = .system
     @AppStorage(PreferenceKey.imageQuality) private var imageQuality = AppPreferences.fallbackImageQuality
     @AppStorage(PreferenceKey.pdfCompression) private var pdfCompression: CompressionQuality = .balanced
@@ -15,6 +17,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
+    @Environment(\.dismiss) private var dismiss
     @State private var viewModel = SettingsViewModel()
 
     var body: some View {
@@ -27,6 +30,13 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("Settings")
+            .toolbar {
+                if showsCloseButton {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+            }
             .confirmationDialog("Clear recent history?",
                                 isPresented: $viewModel.isConfirmingHistory,
                                 titleVisibility: .visible) {

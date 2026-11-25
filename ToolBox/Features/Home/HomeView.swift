@@ -29,6 +29,7 @@ struct HomeView: View {
     @State private var isFileImporterPresented = false
     @State private var isPhotoPickerPresented = false
     @State private var isCameraPresented = false
+    @State private var isSettingsPresented = false
     @State private var photoSelection: [PhotosPickerItem] = []
     @State private var isDropTargeted = false
 
@@ -105,6 +106,16 @@ struct HomeView: View {
             .navigationTitle("OneBox")
             .navigationBarTitleDisplayMode(.large)
             .modifier(NavigationSubtitleModifier(subtitle: "Useful tools. One place."))
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Settings", systemImage: "gearshape") {
+                        isSettingsPresented = true
+                    }
+                }
+            }
+            .sheet(isPresented: $isSettingsPresented) {
+                SettingsView(showsCloseButton: true)
+            }
             .animation(.snappy, value: viewModel.searchText)
             .modifier(importModifiers)
             .quickLookPreview($previewURL)
