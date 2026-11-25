@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// The single source of truth for every tool shown on Home and in Search.
 /// Home and Search both render from `Tool.all` rather than duplicating
@@ -52,6 +53,26 @@ struct Tool: Identifiable, Hashable {
             $0.title.lowercased().contains(q) ||
             $0.subtitle.lowercased().contains(q) ||
             $0.category.rawValue.lowercased().contains(q)
+        }
+    }
+
+    func isCompatible(with media: ImportedMedia) -> Bool {
+        switch media.kind {
+        case .pdf:
+            return id == .compressPDF || id == .ocr
+        case .image:
+            return id == .compressImage || id == .resizeImage || id == .ocr || id == .qrBarcodeScanner
+        }
+    }
+
+    var assetImage: ImageResource {
+        switch id {
+        case .scanDocument: return .toolScanDocument
+        case .compressPDF: return .toolCompressPDF
+        case .compressImage: return .toolCompress
+        case .resizeImage: return .toolResize
+        case .qrBarcodeScanner: return .toolQR
+        case .ocr: return .toolOCR
         }
     }
 }

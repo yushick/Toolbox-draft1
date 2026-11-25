@@ -3,17 +3,21 @@ import SwiftUI
 // MARK: - Glass Modifiers
 
 private struct HeroGlassModifier: ViewModifier {
+    var isInteractive: Bool = true
     var isTargeted: Bool = false
 
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
             content
-                .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 26))
+                .glassEffect(
+                    isInteractive ? .regular.interactive() : .regular,
+                    in: .rect(cornerRadius: 26)
+                )
                 .overlay(
                     RoundedRectangle(cornerRadius: 26, style: .continuous)
                         .strokeBorder(
-                            isTargeted ? AppColors.accent : Color.white.opacity(0.15),
-                            lineWidth: isTargeted ? 2 : 1
+                            isTargeted ? AppColors.accent : Color.clear,
+                            lineWidth: isTargeted ? 2 : 0
                         )
                 )
         } else {
@@ -38,7 +42,6 @@ private struct GlassPillModifier: ViewModifier {
         if #available(iOS 26.0, *) {
             content
                 .glassEffect(.regular.interactive(), in: .capsule)
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
         } else {
             content
                 .background(Capsule().fill(.ultraThinMaterial))
@@ -48,11 +51,15 @@ private struct GlassPillModifier: ViewModifier {
 }
 
 private struct GlassCircleModifier: ViewModifier {
+    var isInteractive: Bool = true
+
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
             content
-                .glassEffect(.regular.interactive(), in: .circle)
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
+                .glassEffect(
+                    isInteractive ? .regular.interactive() : .regular,
+                    in: .circle
+                )
         } else {
             content
                 .background(Circle().fill(.ultraThinMaterial))
@@ -61,11 +68,37 @@ private struct GlassCircleModifier: ViewModifier {
     }
 }
 
+private struct HeroGlassContainerModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: 12) {
+                content
+            }
+        } else {
+            content
+        }
+    }
+}
+
+private struct GlassMorphIDModifier: ViewModifier {
+    let id: String
+    let namespace: Namespace.ID
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffectID(id, in: namespace)
+        } else {
+            content
+        }
+    }
+}
+
 // MARK: - ImportDropZone
 
 /// High-craft Hero Import Card on Home.
-/// When empty, displays a balanced, centered Liquid Glass card with direct "Browse Files" and "Photo Library" pills.
-/// When a file is staged, smoothly transitions into a reusable workspace card with 32pt controls and 36pt tool pills.
+/// When empty, displays a clean Liquid Glass card that morphs open on tap to reveal
+/// 4 import options (Browse Files, Photo Library, Scan Document, Take Photo).
+/// When a file is staged, smoothly transitions into a reusable workspace card.
 struct ImportDropZone: View {
     var stagedMedia: ImportedMedia? = nil
     var thumbnail: UIImage? = nil
@@ -77,9 +110,18 @@ struct ImportDropZone: View {
 
     var onPhotos: () -> Void
     var onFiles: () -> Void
+    var onScanDocument: () -> Void = {}
+    var onCamera: () -> Void = {}
     var onAction: (Tool) -> Void
     var onShare: () -> Void
     var onClear: () -> Void
+
+    @State private var isExpanded = false
+    @Namespace private var glassNamespace
+
+    private var morphAnimation: Animation {
+        .spring(response: 0.44, dampingFraction: 0.86)
+    }
 
     var body: some View {
         Group {
@@ -90,91 +132,154 @@ struct ImportDropZone: View {
             }
         }
         .animation(.snappy, value: stagedMedia != nil)
+        .onChange(of: stagedMedia != nil) { _, hasMedia in
+            if hasMedia {
+                isExpanded = false
+            }
+        }
+        .onChange(of: isTargeted) { _, targeted in
+            if targeted && isExpanded {
+                withAnimation(.snappy(duration: 0.22)) {
+                    isExpanded = false
+                }
+            }
+        }
     }
 
-    // MARK: - Empty State (Hero Import Card)
+    // MARK: - Empty State (Morphing Hero Import Card)
 
     private var heroEmptyCard: some View {
-        VStack(spacing: 16) {
-            Spacer(minLength: 0)
+        ZStack(alignment: .trailing) {
+            // Icon + Title + Subtitle smoothly glides from center to left
+            VStack(alignment: isExpanded ? .leading : .center, spacing: 12) {
+                heroIconBadge
 
-            // Centered Glass Icon Badge
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.06))
-                    .frame(width: 52, height: 52)
+                VStack(alignment: isExpanded ? .leading : .center, spacing: 4) {
+                    Text(isTargeted ? "Drop Files Here" : "Import a File")
+                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
 
-                if isBusy {
-                    ProgressView()
-                } else {
-                    Image(systemName: isTargeted ? "arrow.down.doc.fill" : "doc.badge.plus")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(isTargeted ? AppColors.accent : Color.white)
-                        .symbolEffect(.bounce, value: isTargeted)
+                    Text(isTargeted ? "Release to stage" : "Tap to choose or drop")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.65))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                 }
             }
-            .modifier(GlassCircleModifier())
+            .frame(maxWidth: .infinity, alignment: isExpanded ? .leading : .center)
+            .padding(.trailing, isExpanded ? 168 : 0)
+            .animation(morphAnimation, value: isExpanded)
 
-            // Title & Subtitle
-            VStack(spacing: 4) {
-                Text(isTargeted ? "Drop Files Here" : "Import a File")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.white)
-
-                Text("PDF, Photos, or Documents")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.65))
+            // Right-Side Staggered Stream of 4 Import Pills
+            VStack(spacing: 8) {
+                importOptionPill(
+                    id: "opt-files",
+                    index: 0,
+                    title: "Browse Files",
+                    icon: "folder.fill",
+                    action: onFiles
+                )
+                importOptionPill(
+                    id: "opt-photos",
+                    index: 1,
+                    title: "Photo Library",
+                    icon: "photo.on.rectangle",
+                    action: onPhotos
+                )
+                importOptionPill(
+                    id: "opt-scan",
+                    index: 2,
+                    title: "Scan Document",
+                    icon: "doc.viewfinder",
+                    action: onScanDocument
+                )
+                importOptionPill(
+                    id: "opt-camera",
+                    index: 3,
+                    title: "Take Photo",
+                    icon: "camera.fill",
+                    action: onCamera
+                )
             }
-
-            Spacer(minLength: 0)
-
-            // Direct Action Pills
-            HStack(spacing: 12) {
-                Button {
-                    onFiles()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "folder.fill")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text("Browse Files")
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .foregroundStyle(Color.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 38)
-                    .modifier(GlassPillModifier())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Browse files")
-
-                Button {
-                    onPhotos()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "photo.on.rectangle")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text("Photo Library")
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .foregroundStyle(Color.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 38)
-                    .modifier(GlassPillModifier())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Photo library")
-            }
+            .frame(width: 158)
+            .allowsHitTesting(isExpanded)
         }
         .padding(20)
         .frame(maxWidth: .infinity)
-        .frame(minHeight: 205)
+        .frame(minHeight: 204)
         .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .onTapGesture {
-            onFiles()
+            guard !isTargeted else { return }
+            withAnimation(morphAnimation) {
+                isExpanded.toggle()
+            }
         }
-        .modifier(HeroGlassModifier(isTargeted: isTargeted))
+        .modifier(HeroGlassModifier(isInteractive: !isExpanded, isTargeted: isTargeted))
+        .modifier(HeroGlassContainerModifier())
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Import drop zone")
+        .accessibilityLabel(isExpanded ? "Import options" : "Import a file, tap to show options")
+    }
+
+    private var heroIconBadge: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.06))
+                .frame(width: 52, height: 52)
+
+            if isBusy {
+                ProgressView()
+            } else {
+                Image(systemName: isTargeted ? "arrow.down.doc.fill" : "doc.badge.plus")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(isTargeted ? AppColors.accent : Color.white)
+                    .symbolEffect(.bounce, value: isTargeted)
+            }
+        }
+        .modifier(GlassCircleModifier(isInteractive: false))
+        .modifier(GlassMorphIDModifier(id: "hero-icon", namespace: glassNamespace))
+    }
+
+    private func importOptionPill(
+        id: String,
+        index: Int,
+        title: String,
+        icon: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        let streamAnimation = Animation
+            .spring(response: 0.42, dampingFraction: 0.82)
+            .delay(isExpanded ? Double(index) * 0.045 : Double(3 - index) * 0.025)
+
+        return Button {
+            withAnimation(morphAnimation) {
+                isExpanded = false
+            }
+            action()
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .frame(width: 16)
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity)
+            .frame(height: 36)
+            .modifier(GlassPillModifier())
+            .modifier(GlassMorphIDModifier(id: id, namespace: glassNamespace))
+        }
+        .buttonStyle(.plain)
+        .opacity(isExpanded ? 1 : 0)
+        .offset(x: isExpanded ? 0 : 28)
+        .scaleEffect(isExpanded ? 1 : 0.88, anchor: .trailing)
+        .animation(streamAnimation, value: isExpanded)
     }
 
     // MARK: - Staged State (Staged File Workspace Card)
@@ -202,6 +307,12 @@ struct ImportDropZone: View {
                     }
                     Button { onPhotos() } label: {
                         Label("Photo Library", systemImage: "photo.on.rectangle")
+                    }
+                    Button { onScanDocument() } label: {
+                        Label("Scan Document", systemImage: "doc.viewfinder")
+                    }
+                    Button { onCamera() } label: {
+                        Label("Take Photo", systemImage: "camera")
                     }
                 } label: {
                     HStack(spacing: 5) {
@@ -265,7 +376,7 @@ struct ImportDropZone: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity)
-        .modifier(HeroGlassModifier())
+        .modifier(HeroGlassModifier(isInteractive: false, isTargeted: isTargeted))
     }
 
     private func thumbnailView(media: ImportedMedia) -> some View {
@@ -417,6 +528,8 @@ struct ImportDropZone: View {
             ImportDropZone(
                 onPhotos: {},
                 onFiles: {},
+                onScanDocument: {},
+                onCamera: {},
                 onAction: { _ in },
                 onShare: {},
                 onClear: {}

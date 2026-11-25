@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import SwiftData
 import UIKit
+import PDFKit
 import Observation
 
 enum FileSort: String, CaseIterable, Identifiable {
@@ -14,6 +15,28 @@ enum FileSort: String, CaseIterable, Identifiable {
     var groupsByDay: Bool { self == .newest || self == .oldest }
 }
 
+enum FileTypeFilter: String, CaseIterable, Identifiable {
+    case all = "All"
+    case pdf = "PDF"
+    case image = "Images"
+    case text = "Text"
+
+    var id: String { rawValue }
+
+    func matches(_ file: ProcessedFile) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .pdf:
+            return ProcessedFileKind(rawValue: file.kind) == .pdf
+        case .image:
+            return ProcessedFileKind(rawValue: file.kind) == .image
+        case .text:
+            return ProcessedFileKind(rawValue: file.kind) == .text
+        }
+    }
+}
+
 struct FileSection: Identifiable {
     let id: String
     let title: String?
@@ -24,6 +47,11 @@ struct FileSection: Identifiable {
 @Observable
 final class FilesViewModel {
     var searchText = ""
+    var selectedFilter: FileTypeFilter = .all
+
+    var isSelecting = false
+    var selectedFileIDs: Set<UUID> = []
+    var showBatchDeleteConfirmation = false
 
     var previewURL: URL?
     var fileToDelete: ProcessedFile?
@@ -35,9 +63,10 @@ final class FilesViewModel {
 
     func visibleFiles(from files: [ProcessedFile], sort: FileSort) -> [ProcessedFile] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let filtered = query.isEmpty
-            ? files
-            : files.filter { $0.filename.localizedCaseInsensitiveContains(query) }
+        let filtered = files.filter { file in
+            guard selectedFilter.matches(file) else { return false }
+            return query.isEmpty || file.filename.localizedCaseInsensitiveContains(query)
+        }
 
         switch sort {
         case .newest: return filtered.sorted { $0.createdAt > $1.createdAt }
@@ -86,7 +115,40 @@ final class FilesViewModel {
         return "\(count) file\(count == 1 ? "" : "s") · \(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file))"
     }
 
-    // MARK: - Actions
+    // MARK: - Selection & Batch Actions
+
+    func toggleSelection(for file: ProcessedFile) {
+        if selectedFileIDs.contains(file.id) {
+            selectedFileIDs.remove(file.id)
+        } else {
+            selectedFileIDs.insert(file.id)
+        }
+    }
+
+    func endSelection() {
+        isSelecting = false
+        selectedFileIDs.removeAll()
+    }
+
+    func batchShare(from files: [ProcessedFile]) {
+        let urls = files
+            .filter { selectedFileIDs.contains($0.id) && FileService.exists($0) }
+            .map { FileService.url(for: $0) }
+        guard !urls.isEmpty else { return }
+        ShareSheet.present(urls)
+    }
+
+    func batchDelete(from files: [ProcessedFile], in context: ModelContext) {
+        let targets = files.filter { selectedFileIDs.contains($0.id) }
+        for file in targets {
+            try? FileService.deleteFromDisk(file)
+            context.delete(file)
+        }
+        try? context.save()
+        endSelection()
+    }
+
+    // MARK: - Single-File Actions
 
     func preview(_ file: ProcessedFile) {
         guard FileService.exists(file) else { alertMessage = FileService.FileError.missing.localizedDescription; return }
@@ -130,5 +192,24 @@ final class FilesViewModel {
 
         context.delete(file)
         try? context.save()
+    }
+
+    // MARK: - Async Thumbnails
+
+    nonisolated static func loadThumbnail(for url: URL, kindRaw: String) async -> UIImage? {
+        guard let kind = ProcessedFileKind(rawValue: kindRaw), kind != .text else { return nil }
+        return await Task.detached(priority: .utility) {
+            switch kind {
+            case .image:
+                guard let image = UIImage(contentsOfFile: url.path) else { return nil }
+                return image.preparingThumbnail(of: CGSize(width: 88, height: 88)) ?? image
+            case .pdf:
+                guard let document = PDFDocument(url: url),
+                      let page = document.page(at: 0) else { return nil }
+                return page.thumbnail(of: CGSize(width: 88, height: 88), for: .cropBox)
+            case .text:
+                return nil
+            }
+        }.value
     }
 }

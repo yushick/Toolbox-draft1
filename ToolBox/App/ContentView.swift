@@ -6,33 +6,57 @@ struct ContentView: View {
     @AppStorage(OnboardingState.completedKey) private var hasCompletedOnboarding = false
 
     var body: some View {
-        TabView(selection: $appState.selectedTab) {
-            HomeView(onSelectTool: { appState.present($0) },
-                     onImport: { appState.present($0, with: $1) })
-                .tabItem { Label("Home", systemImage: "square.grid.2x2") }
-                .tag(AppState.Tab.home)
+        tabBarContent
+            .environment(appState)
+            .tint(AppColors.accent)
+            .preferredColorScheme(appearance.colorScheme)
+            .fullScreenCover(isPresented: Binding(
+                get: { !hasCompletedOnboarding },
+                set: { if !$0 { hasCompletedOnboarding = true } })
+            ) {
+                OnboardingView { hasCompletedOnboarding = true }
+                    .preferredColorScheme(appearance.colorScheme)
+            }
+            .sheet(item: $appState.presentedTool, onDismiss: { appState.importedMedia = nil }) { tool in
+                ToolDestination(tool: tool, media: appState.importedMedia)
+                    // Sheets are presented separately, so give them the theme too.
+                    .preferredColorScheme(appearance.colorScheme)
+            }
+    }
 
-            FilesView()
-                .tabItem { Label("Files", systemImage: "folder") }
-                .tag(AppState.Tab.files)
+    @ViewBuilder
+    private var tabBarContent: some View {
+        let baseTabs = TabView(selection: $appState.selectedTab) {
+            Tab("Home", systemImage: "square.grid.2x2", value: AppState.Tab.home) {
+                HomeView(onSelectTool: { appState.present($0) },
+                         onImport: { appState.present($0, with: $1) },
+                         onSeeAllTools: { appState.selectedTab = .tools },
+                         onSeeAllFiles: { appState.selectedTab = .files })
+            }
 
-            SettingsView()
-                .tabItem { Label("Settings", systemImage: "gearshape") }
-                .tag(AppState.Tab.settings)
+            Tab("Files", systemImage: "folder", value: AppState.Tab.files) {
+                FilesView()
+            }
+
+            Tab("Settings", systemImage: "gearshape", value: AppState.Tab.settings) {
+                SettingsView()
+            }
+
+            if #available(iOS 27.0, *) {
+                Tab("Tools", systemImage: "wrench.and.screwdriver", value: AppState.Tab.tools, role: .prominent) {
+                    ToolsView()
+                }
+            } else {
+                Tab("Tools", systemImage: "wrench.and.screwdriver", value: AppState.Tab.tools) {
+                    ToolsView()
+                }
+            }
         }
-        .tint(AppColors.accent)
-        .preferredColorScheme(appearance.colorScheme)
-        .fullScreenCover(isPresented: Binding(
-            get: { !hasCompletedOnboarding },
-            set: { if !$0 { hasCompletedOnboarding = true } })
-        ) {
-            OnboardingView { hasCompletedOnboarding = true }
-                .preferredColorScheme(appearance.colorScheme)
-        }
-        .sheet(item: $appState.presentedTool, onDismiss: { appState.importedMedia = nil }) { tool in
-            ToolDestination(tool: tool, media: appState.importedMedia)
-                // Sheets are presented separately, so give them the theme too.
-                .preferredColorScheme(appearance.colorScheme)
+
+        if #available(iOS 26.0, *) {
+            baseTabs.tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            baseTabs
         }
     }
 }

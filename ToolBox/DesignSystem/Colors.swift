@@ -44,3 +44,80 @@ enum AppColors {
         })
     }
 }
+
+/// Pure OLED black canvas with a subtle top 38% teal-to-indigo ambient glow
+/// shared across Home, Tools, and Files.
+struct AmbientCanvasBackground: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let height = proxy.size.height * 0.38
+            ZStack(alignment: .top) {
+                Color.black
+
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.0, green: 0.63, blue: 0.61).opacity(0.40),
+                        Color(red: 0.12, green: 0.13, blue: 1.0).opacity(0.22),
+                        Color.black
+                    ],
+                    center: .top,
+                    startRadius: 10,
+                    endRadius: height
+                )
+                .frame(height: height)
+                .drawingGroup()
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+/// Reusable iOS 26 Liquid Glass filter pill with `.ultraThinMaterial` fallback.
+struct LiquidGlassFilterChip: View {
+    let title: String
+    let isSelected: Bool
+    var icon: String? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.75))
+            .padding(.horizontal, 14)
+            .frame(height: 34)
+            .modifier(FilterChipGlassModifier(isSelected: isSelected))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct FilterChipGlassModifier: ViewModifier {
+    let isSelected: Bool
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(
+                    isSelected ? .regular.tint(AppColors.accent).interactive() : .regular.interactive(),
+                    in: .capsule
+                )
+        } else {
+            content
+                .background(
+                    Capsule().fill(isSelected ? AppColors.accent.opacity(0.85) : Color.white.opacity(0.08))
+                )
+                .overlay {
+                    Capsule().strokeBorder(Color.white.opacity(isSelected ? 0.25 : 0.12), lineWidth: 1)
+                }
+        }
+    }
+}

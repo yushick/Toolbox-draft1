@@ -68,6 +68,7 @@
 		ECD21AEDC3BDD3A2FD594746 /* ImportDropZone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DD5BD973A8F5282C0BFDE61 /* ImportDropZone.swift */; };
 		F1C0DF69CE357F07AC627676 /* ImageResizerFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3839BD3B02690F58D48C9A20 /* ImageResizerFlowView.swift */; };
 		F3CBE2744BEC3A6BDA1A99EF /* FilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45E5D7DFD1E4AB00A5A20297 /* FilesView.swift */; };
+		A1B2C3D4E5F6000100020001 /* ToolsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000100020002 /* ToolsView.swift */; };
 		F69C20529CE8994667B2EE4D /* ProcessingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6D29BA48C4B50B8EE26C19C /* ProcessingView.swift */; };
 		F8E50F29367D6F1DDB67C64C /* SectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 519AA1E15771169D866D1404 /* SectionHeader.swift */; };
 		F9BFAB86BEC2FBBCA1592CE0 /* AppPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7559FC7A9E16A1589246B06 /* AppPreferences.swift */; };
@@ -110,6 +111,7 @@
 		41A66E6B4553E08416AE0EEE /* PDFCompressorFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFCompressorFlowView.swift; sourceTree = "<group>"; };
 		44DDECF07A62B41F7A0C18E1 /* FeatureAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureAccess.swift; sourceTree = "<group>"; };
 		45E5D7DFD1E4AB00A5A20297 /* FilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6000100020002 /* ToolsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolsView.swift; sourceTree = "<group>"; };
 		47BABC34CE8289754B0EECFA /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		4910C02958961655AE61EA81 /* OCRFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRFlowView.swift; sourceTree = "<group>"; };
 		4C036670D8CD5FF3C29ACC1E /* ResizeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResizeModels.swift; sourceTree = "<group>"; };
@@ -258,6 +260,7 @@
 			isa = PBXGroup;
 			children = (
 				E69D0B9B8D0EE16FFD7B9B41 /* Files */,
+				A1B2C3D4E5F6000100020003 /* Tools */,
 				CCBD8C10772431E070695F70 /* Home */,
 				24E2BD03A62080CA7548E86A /* ImageCompressor */,
 				7AD51E3EFC97B0E8BF7CD17C /* ImageResizer */,
@@ -377,6 +380,14 @@
 				D30C1B1A65A6FFD334427C6F /* FilesViewModel.swift */,
 			);
 			path = Files;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F6000100020003 /* Tools */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F6000100020002 /* ToolsView.swift */,
+			);
+			path = Tools;
 			sourceTree = "<group>";
 		};
 		EB949287AD4F65E280A1D24E /* Onboarding */ = {
@@ -549,6 +560,7 @@
 				CB4F9FB23DF4156BB51A6806 /* FeatureAccess.swift in Sources */,
 				1F65A4FAFDCF8A2D58F2ADD0 /* FileService.swift in Sources */,
 				F3CBE2744BEC3A6BDA1A99EF /* FilesView.swift in Sources */,
+				A1B2C3D4E5F6000100020001 /* ToolsView.swift in Sources */,
 				00D1EE2C094F87123B23F37C /* FilesViewModel.swift in Sources */,
 				4A37397B9599FAFF0CD14B5C /* HomeView.swift in Sources */,
 				8C19AE84688CD36AD2C48C59 /* HomeViewModel.swift in Sources */,

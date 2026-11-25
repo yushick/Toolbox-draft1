@@ -35,11 +35,20 @@ struct ImportAction: Identifiable {
 }
 
 /// Transferable used by drag & drop: copies whatever is dropped into
-/// our own temp folder.
+/// our own temp folder, with explicit image data fallback for Apple Photos.
 struct DroppedFile: Transferable {
     let url: URL
 
     static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .pdf) { received in
+            DroppedFile(url: try ImportService.copyIn(received.file))
+        }
+        FileRepresentation(importedContentType: .image) { received in
+            DroppedFile(url: try ImportService.copyIn(received.file))
+        }
+        DataRepresentation(importedContentType: .image) { data in
+            DroppedFile(url: try ImportService.writeImageData(data))
+        }
         FileRepresentation(importedContentType: .item) { received in
             DroppedFile(url: try ImportService.copyIn(received.file))
         }
@@ -61,6 +70,17 @@ enum ImportService {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let destination = folder.appendingPathComponent(source.lastPathComponent)
         try FileManager.default.copyItem(at: source, to: destination)
+        return destination
+    }
+
+    /// Writes dropped raw image bytes (e.g. from Apple Photos drag-and-drop) into `imports/<uuid>/Photo.<ext>`.
+    static func writeImageData(_ data: Data) throws -> URL {
+        let folder = directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let isPNG = data.starts(with: [0x89, 0x50, 0x4E, 0x47])
+        let ext = isPNG ? "png" : "jpg"
+        let destination = folder.appendingPathComponent("Photo.\(ext)")
+        try data.write(to: destination, options: .atomic)
         return destination
     }
 
